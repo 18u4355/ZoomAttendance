@@ -18,7 +18,7 @@ namespace ZoomAttendance.Repositories.Implementations
             _emailService = emailService;
         }
 
-        // 🔑 Generate join token and send email to staff
+        //  Generate join token and send email to staff
         public async Task<ApiResponse<string>> GenerateJoinTokenAsync(int meetingId, string staffEmail)
         {
             try
@@ -60,7 +60,7 @@ namespace ZoomAttendance.Repositories.Implementations
             }
         }
 
-        // 📝 Staff joins with token
+        // Staff joins with token
         public async Task<ApiResponse<bool>> LogAttendanceAsync(string token)
         {
             try
@@ -98,54 +98,6 @@ namespace ZoomAttendance.Repositories.Implementations
                 return ApiResponse<bool>.Fail("Failed to confirm attendance", ex.Message);
             }
         }
-
-        // 📊 HR: Get attendance report between dates
-        public async Task<ApiResponse<List<AttendanceReportResponse>>> GetAttendanceReportAsync(
-     DateTime start,
-     DateTime end)
-        {
-            try
-            {
-                var report = await _db.Attendance
-                    .AsNoTracking()
-                    .Where(a =>
-                        a.JoinTime.HasValue &&
-                        a.JoinTime.Value >= start &&
-                        a.JoinTime.Value <= end
-                    )
-                    .Include(a => a.Meeting) // ✅ only works if navigation exists
-                    .Select(a => new AttendanceReportResponse
-                    {
-                        MeetingId = a.MeetingId,
-                        MeetingTitle = a.Meeting != null ? a.Meeting.Title : null,
-
-                        StaffEmail = a.StaffEmail,
-
-                        JoinTime = a.JoinTime.Value,
-
-                        ConfirmedAttendance = a.ConfirmAttendance,
-
-                        ConfirmationTime = a.ConfirmationTime
-                    })
-                    .OrderBy(r => r.JoinTime)
-                    .ToListAsync();
-
-                return ApiResponse<List<AttendanceReportResponse>>.Success(
-                    report,
-                    "Attendance report fetched successfully"
-                );
-            }
-            catch (Exception ex)
-            {
-                return ApiResponse<List<AttendanceReportResponse>>.Fail(
-                    "Failed to fetch attendance report",
-                    ex.InnerException?.Message ?? ex.Message
-                );
-            }
-        }
-
-
-        // Optional helper to fetch by token
        
     }
 }

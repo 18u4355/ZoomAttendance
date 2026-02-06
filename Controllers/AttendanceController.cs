@@ -16,7 +16,7 @@ namespace ZoomAttendance.Controllers
             _attendanceRepo = attendanceRepo;
         }
 
-        // 🔑 Generate join token and send email
+        // Generate join token and send email
         // Public endpoint for HR to invite staff
         [HttpPost("generate-link")]
         [Authorize(Roles = "HR")]
@@ -30,7 +30,7 @@ namespace ZoomAttendance.Controllers
             return Ok(response);
         }
 
-        // 📝 Staff joins meeting using token
+        // Staff joins meeting using token
         [HttpPost("join")]
         [AllowAnonymous] // No JWT required
         public async Task<IActionResult> Join([FromQuery] string token)
@@ -43,25 +43,12 @@ namespace ZoomAttendance.Controllers
             return Ok(response);
         }
 
-        // ✅ Staff confirms attendance
+        // Staff confirms attendance
         [HttpPost("confirm")]
         [AllowAnonymous] // No JWT required
         public async Task<IActionResult> Confirm([FromQuery] string token)
         {
             var response = await _attendanceRepo.ConfirmAttendanceAsync(token);
-
-            if (!response.IsSuccessful)
-                return BadRequest(response);
-
-            return Ok(response);
-        }
-
-        // 📊 HR: Get attendance report between dates
-        [HttpGet("report")]
-        [Authorize(Roles = "HR")]
-        public async Task<IActionResult> Report([FromQuery] DateTime start, [FromQuery] DateTime end)
-        {
-            var response = await _attendanceRepo.GetAttendanceReportAsync(start, end);
 
             if (!response.IsSuccessful)
                 return BadRequest(response);
