@@ -13,7 +13,10 @@ namespace ZoomAttendance.Models.Entities
         public string? ConfirmationToken { get; set; }
         public string? JoinToken { get; set; }
         public string StaffEmail { get; set; } = null!; // required
-
+        public DateTime? ConfirmationExpiresAt { get; set; }
+        public DateTime? ClosedAt { get; set; }
         public Meeting? Meeting { get; set; }
+
+
     }
 }

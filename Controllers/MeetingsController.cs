@@ -35,3 +35,4 @@ public class MeetingsController : ControllerBase
         return StatusCode(result.IsSuccessful ? 200 : 400, result);
     }
 }
+

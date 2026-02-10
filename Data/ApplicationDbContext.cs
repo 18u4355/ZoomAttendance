@@ -16,7 +16,7 @@ namespace ZoomAttendance.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // ================= USERS =================
+            //USERS
             modelBuilder.Entity<User>(entity =>
             {
                 entity.ToTable("users");
@@ -28,7 +28,7 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired();
             });
 
-            // ================= MEETINGS =================
+            //MEETINGS
             modelBuilder.Entity<Meeting>(entity =>
             {
                 entity.ToTable("meetings");
@@ -37,12 +37,13 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.Title).HasColumnName("title").IsRequired();
                 entity.Property(e => e.ZoomUrl).HasColumnName("zoom_url").IsRequired();
                 entity.Property(e => e.StartTime).HasColumnName("start_time").IsRequired();
-                entity.Property(e => e.EndTime).HasColumnName("end_time");
                 entity.Property(e => e.CreatedBy).HasColumnName("created_by").IsRequired();
                 entity.Property(e => e.IsActive).HasColumnName("is_active").IsRequired();
+                entity.Property(e => e.ClosedAt).HasColumnName("closed_at");
+
             });
 
-            // ================= ATTENDANCE =================
+            // ATTENDANCE
             modelBuilder.Entity<MeetingAttendance>(entity =>
             {
                 entity.ToTable("attendance");
@@ -73,7 +74,13 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.ConfirmationToken)
                       .HasColumnName("confirmation_token");
 
-                // ✅ Relationship with Meeting
+                entity.Property(e => e.ConfirmationExpiresAt)
+                      .HasColumnName("confirmation_expires_at");
+
+                entity.Property(e => e.ClosedAt)
+                      .HasColumnName("closed_at");
+
+
                 entity.HasOne<Meeting>()
                       .WithMany()
                       .HasForeignKey(e => e.MeetingId)

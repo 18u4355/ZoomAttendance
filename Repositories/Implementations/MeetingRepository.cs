@@ -4,13 +4,22 @@ using ZoomAttendance.Models.Entities;
 using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
+using ZoomAttendance.Services;
 
 namespace ZoomAttendance.Repositories.Implementations
 {
     public class MeetingRepository : IMeetingRepository
     {
         private readonly ApplicationDbContext _db;
-        public MeetingRepository(ApplicationDbContext db) => _db = db;
+        private readonly IEmailService _emailService;
+
+        public MeetingRepository(
+            ApplicationDbContext db,
+            IEmailService emailService)
+        {
+            _db = db;
+            _emailService = emailService;
+        }
 
         public async Task<ApiResponse<bool>> CreateMeetingAsync(CreateMeetingRequest request, int hrId)
         {
@@ -21,7 +30,6 @@ namespace ZoomAttendance.Repositories.Implementations
                     Title = request.Title,
                     ZoomUrl = request.ZoomUrl,
                     StartTime = request.StartTime,
-                    EndTime = request.EndTime,
                     CreatedBy = hrId,
                     IsActive = true
                 };
@@ -60,25 +68,5 @@ namespace ZoomAttendance.Repositories.Implementations
             }
         }
 
-        public async Task<ApiResponse<bool>> EndMeetingAsync(int meetingId)
-        {
-            try
-            {
-                var meeting = await _db.Meetings.FirstOrDefaultAsync(m => m.MeetingId == meetingId);
-                if (meeting == null) return ApiResponse<bool>.Fail("Meeting not found");
-
-                meeting.IsActive = false;
-                meeting.EndTime = DateTime.UtcNow;
-
-                _db.Meetings.Update(meeting);
-                await _db.SaveChangesAsync();
-
-                return ApiResponse<bool>.Success(true, "Meeting ended successfully");
-            }
-            catch (Exception ex)
-            {
-                return ApiResponse<bool>.Fail("Failed to end meeting", ex.Message);
-            }
-        }
     }
 }

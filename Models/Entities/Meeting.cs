@@ -9,8 +9,10 @@ namespace ZoomAttendance.Models.Entities
         public string Title { get; set; } = null!;
         public string ZoomUrl { get; set; } = null!;
         public DateTime StartTime { get; set; }
-        public DateTime? EndTime { get; set; }
         public int CreatedBy { get; set; }
         public bool IsActive { get; set; } = true;
+        public DateTime? ClosedAt { get; set; }
+
     }
+
 }
