@@ -7,7 +7,7 @@ namespace ZoomAttendance.Models.Entities
     {
         public int AttendanceId { get; set; }      // attendance_id
         public int MeetingId { get; set; }
-        public DateTime? JoinTime { get; set; }   // nullable now
+        public DateTime? JoinTime { get; set; }   
         public bool ConfirmAttendance { get; set; } = false;
         public DateTime? ConfirmationTime { get; set; }
         public string? ConfirmationToken { get; set; }
