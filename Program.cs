@@ -10,14 +10,24 @@ using ZoomAttendance.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", builder =>
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader());
+});
+
 
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IMeetingRepository, MeetingRepository>();
 builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -75,8 +85,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-var app = builder.Build();
 
+var app = builder.Build();
+app.UseCors();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -85,9 +96,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+
+
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

@@ -12,7 +12,8 @@ namespace ZoomAttendance.Models.Entities
         public int CreatedBy { get; set; }
         public bool IsActive { get; set; } = true;
         public DateTime? ClosedAt { get; set; }
-
+        public DateTime CreatedAt { get; set; }
+    
     }
 
 }

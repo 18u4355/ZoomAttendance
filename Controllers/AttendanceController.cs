@@ -23,62 +23,71 @@ namespace ZoomAttendance.Controllers
         // Public endpoint for HR to invite staff
         [HttpPost("generate-link")]
         [Authorize(Roles = "HR")]
-        public async Task<IActionResult> GenerateLink([FromQuery] int meetingId, [FromQuery] string email)
+        public async Task<IActionResult> GenerateJoinLink(int meetingId, string email)
         {
-            var response = await _attendanceRepo.GenerateJoinTokenAsync(meetingId, email);
+            var result = await _attendanceRepo
+                .GenerateJoinTokenAsync(meetingId, email);
 
-            if (!response.IsSuccessful)
-                return BadRequest(response);
+            if (!result.IsSuccessful)
+                return BadRequest(result);
 
-            return Ok(response);
+            return Ok(result);
         }
-
         // Staff joins meeting using token
-        [HttpPost("join")]
-        public async Task<IActionResult> Join([FromQuery] string token)
+        [HttpGet("join")]
+        public async Task<IActionResult> JoinMeeting([FromQuery] string token)
         {
-            var result = await _attendanceRepo.LogAttendanceAsync(token);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
+            var result = await _attendanceRepo
+                .ValidateAndConfirmAsync(token);
+
+            if (!result.IsSuccessful)
+                return BadRequest(result.Message);
+
+            // 🔥 Direct redirect to Zoom
+            return Redirect(result.Data);
         }
-        // Staff confirms attendance
-        [HttpPost("confirm")]
-        public async Task<IActionResult> Confirm([FromQuery] string token)
-        {
-            var result = await _attendanceRepo.ConfirmAttendanceAsync(token);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
-        }
+
+
         [Authorize(Roles = "HR")]
         [HttpPost("/api/meetings/close/{meetingId}")]
         public async Task<IActionResult> CloseMeeting([FromRoute] int meetingId)
         {
             var result = await _attendanceRepo.CloseMeetingAsync(meetingId);
             return StatusCode(result.IsSuccessful ? 200 : 400, result);
+
         }
-//        [Authorize(Roles = "HR")]
-//        [HttpGet("report")]
-//        public async Task<IActionResult> GetAttendanceReport([FromQuery] AttendanceReportRequest request)
-//        {
-//            var result = await _attendanceRepo.GetAttendanceReportAsync(request);
+        [HttpGet("confirm")]
+        public async Task<IActionResult> Confirm([FromQuery] string token)
+        {
+            var (_, redirectUrl) = await _attendanceRepo.ConfirmCloseMeetingAsync(token);
+            return Redirect(redirectUrl);
+        }
+    }
+    //        [Authorize(Roles = "HR")]
+    //        [HttpGet("report")]
+    //        public async Task<IActionResult> GetAttendanceReport([FromQuery] AttendanceReportRequest request)
+    //        {
+    //            var result = await _attendanceRepo.GetAttendanceReportAsync(request);
 
-//            if (!result.IsSuccessful)
-//                return BadRequest(result);
+    //            if (!result.IsSuccessful)
+    //                return BadRequest(result);
 
-//            // Optional: CSV export
-//            if (request.ExportCsv && result.Data != null)
-//            {
-//                var csv = new StringBuilder();
-//                csv.AppendLine("MeetingTitle,StaffName,JoinTime,ConfirmedAttendance,ConfirmationTime");
-//                foreach (var item in result.Data.Items)
-//                {
-//                    csv.AppendLine($"{item.MeetingTitle},{item.StaffName},{item.JoinTime:yyyy-MM-dd HH:mm},{item.ConfirmedAttendance},{item.ConfirmationTime:yyyy-MM-dd HH:mm}");
-//                }
-//                var bytes = Encoding.UTF8.GetBytes(csv.ToString());
-//                return File(bytes, "text/csv", "AttendanceReport.csv");
-//            }
+    //            // Optional: CSV export
+    //            if (request.ExportCsv && result.Data != null)
+    //            {
+    //                var csv = new StringBuilder();
+    //                csv.AppendLine("MeetingTitle,StaffName,JoinTime,ConfirmedAttendance,ConfirmationTime");
+    //                foreach (var item in result.Data.Items)
+    //                {
+    //                    csv.AppendLine($"{item.MeetingTitle},{item.StaffName},{item.JoinTime:yyyy-MM-dd HH:mm},{item.ConfirmedAttendance},{item.ConfirmationTime:yyyy-MM-dd HH:mm}");
+    //                }
+    //                var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+    //                return File(bytes, "text/csv", "AttendanceReport.csv");
+    //            }
 
-//            return Ok(result);
-//        }
-
-   }
+    //            return Ok(result);
+    //        }
 
 }
+
+

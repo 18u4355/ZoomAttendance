@@ -1,8 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using ZoomAttendance.Data;
 using ZoomAttendance.Models;
 using ZoomAttendance.Models.Entities;
-using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
 using ZoomAttendance.Services;
@@ -20,111 +20,167 @@ namespace ZoomAttendance.Repositories.Implementations
             _emailService = emailService;
         }
 
-        //  Generate join token and send email to staff
+        // ✅ Generate Join Token and Send Direct Backend Link
         public async Task<ApiResponse<string>> GenerateJoinTokenAsync(int meetingId, string staffEmail)
         {
             try
             {
-                // Check meeting exists
-                var meeting = await _db.Meetings.FirstOrDefaultAsync(m => m.MeetingId == meetingId);
-                if (meeting == null)
-                    return ApiResponse<string>.Fail("Meeting not found");
+                var meeting = await _db.Meetings
+                    .FirstOrDefaultAsync(m => m.MeetingId == meetingId && m.IsActive);
 
-                // Create attendance record
-                var token = Guid.NewGuid().ToString();
+                if (meeting == null)
+                    return ApiResponse<string>.Fail("Meeting not found or inactive");
+
+                var joinToken = Guid.NewGuid().ToString();
+                var confirmationToken = Guid.NewGuid().ToString();
+
                 var attendance = new MeetingAttendance
                 {
                     MeetingId = meetingId,
                     StaffEmail = staffEmail,
-                    JoinToken = token,
-                    ConfirmAttendance = false,
-                    JoinTime = null,
-                    ConfirmationTime = null
+
+                    JoinToken = joinToken,
+                    JoinTime = DateTime.UtcNow,
+
+
+
+
+
                 };
 
                 _db.Attendance.Add(attendance);
                 await _db.SaveChangesAsync();
 
-                // Send email with join link
-                var joinLink = $"https://yourfrontend.com/join?token={token}";
+                //  Direct backend link (NOT frontend)
+                var joinLink = $"http://207.180.246.69:7200/api/attendance/join?token={joinToken}";
+
                 await _emailService.SendEmailAsync(
                     staffEmail,
                     "Meeting Invitation",
-                    $"You are invited to join the meeting: <a href='{joinLink}'>Join Meeting</a>"
+                    $"You are invited to '{meeting.Title}'.<br/><br/>" +
+                    $"Click below to join:<br/>" +
+                    $"<a href='{joinLink}'>Join Meeting</a>"
                 );
 
-                return ApiResponse<string>.Success(token, "Token generated and email sent");
+                return ApiResponse<string>.Success(joinToken, "Join link generated and email sent");
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.InnerException?.Message ?? ex.Message);
-                return ApiResponse<string>.Fail("Failed to generate token or send email", ex.InnerException?.Message ?? ex.Message);
+                return ApiResponse<string>.Fail("Failed to generate join link", ex.Message);
             }
         }
 
-        // Staff joins with token
-        public async Task<ApiResponse<bool>> LogAttendanceAsync(string token)
+        // Validate Token + Confirm + Return Zoom URL
+        public async Task<ApiResponse<string>> ValidateAndConfirmAsync(string token)
         {
-            var record = await _db.Attendance.FirstOrDefaultAsync(a => a.JoinToken == token);
-            if (record == null) return ApiResponse<bool>.Fail("Invalid token");
+            if (string.IsNullOrWhiteSpace(token))
+                return ApiResponse<string>.Fail("Token is required");
 
-            record.JoinTime = DateTime.UtcNow;
-            record.ConfirmAttendance = false; // confirmed only after meeting closes
+            var attendance = await _db.Attendance
+                .Include(a => a.Meeting)
+                .FirstOrDefaultAsync(a => a.JoinToken == token);
+
+            if (attendance == null)
+                return ApiResponse<string>.Fail("Invalid token");
+
+            if (attendance.ConfirmAttendance)
+                return ApiResponse<string>.Fail("Attendance already confirmed");
+
+            if (!attendance.Meeting.IsActive || attendance.Meeting.ClosedAt != null)
+                return ApiResponse<string>.Fail("Meeting has been closed");
+
+            if (attendance.ConfirmationExpiresAt.HasValue &&
+                DateTime.UtcNow > attendance.ConfirmationExpiresAt.Value)
+                return ApiResponse<string>.Fail("Token has expired");
+
+
             await _db.SaveChangesAsync();
 
-            return ApiResponse<bool>.Success(true, "Attendance logged successfully");
+            return ApiResponse<string>.Success(
+                attendance.Meeting.ZoomUrl,
+                "Attendance confirmed"
+            );
         }
 
-
-        public async Task<ApiResponse<bool>> ConfirmAttendanceAsync(string token)
-        {
-            var record = await _db.Attendance.FirstOrDefaultAsync(a => a.JoinToken == token);
-            if (record == null) return ApiResponse<bool>.Fail("Invalid token");
-
-            if (!record.ConfirmationExpiresAt.HasValue || DateTime.UtcNow > record.ConfirmationExpiresAt.Value)
-            {
-                return ApiResponse<bool>.Fail("Confirmation window expired");
-            }
-
-            record.ConfirmAttendance = true;
-            record.ConfirmationTime = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            return ApiResponse<bool>.Success(true, "Attendance confirmed successfully");
-        }
-
+        // ✅ Close Meeting
         public async Task<ApiResponse<bool>> CloseMeetingAsync(int meetingId)
         {
-            var meeting = await _db.Meetings.FirstOrDefaultAsync(m => m.MeetingId == meetingId);
-            if (meeting == null) return ApiResponse<bool>.Fail("Meeting not found");
-            if (!meeting.IsActive) return ApiResponse<bool>.Fail("Meeting already closed");
+            var meeting = await _db.Meetings
+                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
 
+            if (meeting == null)
+                return ApiResponse<bool>.Fail("Meeting not found");
+
+            if (!meeting.IsActive)
+                return ApiResponse<bool>.Fail("Meeting already closed");
+
+            // Close meeting
             meeting.IsActive = false;
             meeting.ClosedAt = DateTime.UtcNow;
 
-            await _db.SaveChangesAsync();
-
-            // Send confirmation emails to all who joined
+            // Get attendees who actually joined
             var attendees = await _db.Attendance
                 .Where(a => a.MeetingId == meetingId && a.JoinTime != null)
                 .ToListAsync();
 
+            // Set confirmation token and expiry for each attendee
             foreach (var attendee in attendees)
             {
-                attendee.ConfirmationExpiresAt = meeting.ClosedAt.Value.AddMinutes(15);
+                if (string.IsNullOrWhiteSpace(attendee.ConfirmationToken))
+                    attendee.ConfirmationToken = Guid.NewGuid().ToString();
 
-                var confirmLink = $"https://yourfrontend.com/confirm?token={attendee.JoinToken}";
+                attendee.ConfirmationExpiresAt = DateTime.UtcNow.AddMinutes(15);
+            }
+
+            // Save changes before sending emails
+            await _db.SaveChangesAsync();
+
+            // Send confirmation emails
+            foreach (var attendee in attendees)
+            {
+                var confirmLink = $"http://207.180.246.69:7200/api/attendance/confirm?token={attendee.ConfirmationToken}";
+
                 await _emailService.SendEmailAsync(
                     attendee.StaffEmail,
                     "Confirm Your Attendance",
-                    $"Please confirm your attendance for '{meeting.Title}'. This link will expire in 15 minutes: <a href='{confirmLink}'>Confirm Attendance</a>"
+                    $"Please confirm your attendance for '{meeting.Title}'.<br/>" +
+                    $"This link expires in 15 minutes:<br/>" +
+                    $"<a href='{confirmLink}'>Confirm Attendance</a>"
                 );
             }
 
-            await _db.SaveChangesAsync();
             return ApiResponse<bool>.Success(true, "Meeting closed and confirmation emails sent");
         }
+        public async Task<(bool Success, string RedirectUrl)> ConfirmCloseMeetingAsync(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return (false, "http://localhost:3000/confirmation/invalid"); // frontend dev
 
+            var attendance = await _db.Attendance
+                .Include(a => a.Meeting)
+                .FirstOrDefaultAsync(a => a.ConfirmationToken == token);
+
+            if (attendance == null)
+                return (false, "http://localhost:3000/confirmation/invalid");
+
+            if (attendance.Meeting.IsActive)
+                return (false, "http://localhost:3000/confirmation/invalid");
+
+            if (attendance.ConfirmAttendance)
+                return (false, "http://localhost:3000/confirmation/already");
+
+            if (attendance.ConfirmationExpiresAt == null || attendance.ConfirmationExpiresAt < DateTime.UtcNow)
+                return (false, "http://localhost:3000/confirmation/expired");
+
+            attendance.ConfirmAttendance = true;
+            attendance.ConfirmationTime = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            return (true, "http://localhost:3000/confirmation/success");
+        }
+    }
+}
         //public async Task<ApiResponse<PaginatedResponse<AttendanceReportResponse>>> GetAttendanceReportAsync(AttendanceReportRequest request)
         //{
         //    try
@@ -136,44 +192,42 @@ namespace ZoomAttendance.Repositories.Implementations
         //                        a.Meeting.ClosedAt <= request.End &&
         //                        a.ConfirmAttendance); // Only confirmed attendees
 
-        //        // Apply optional filters
-        //        if (!string.IsNullOrEmpty(request.MeetingTitle))
-        //            query = query.Where(a => a.Meeting.Title.Contains(request.MeetingTitle));
+//        // Apply optional filters
+//        if (!string.IsNullOrEmpty(request.MeetingTitle))
+//            query = query.Where(a => a.Meeting.Title.Contains(request.MeetingTitle));
 
-        //        if (!string.IsNullOrEmpty(request.StaffEmail))
-        //            query = query.Where(a => a.StaffEmail.Contains(request.StaffEmail));
+//        if (!string.IsNullOrEmpty(request.StaffEmail))
+//            query = query.Where(a => a.StaffEmail.Contains(request.StaffEmail));
 
-        //        var totalCount = await query.CountAsync();
+//        var totalCount = await query.CountAsync();
 
-        //        var items = await query
-        //            .OrderByDescending(a => a.JoinTime)
-        //            .Skip((request.Page - 1) * request.PageSize)
-        //            .Take(request.PageSize)
-        //            .Select(a => new AttendanceReportResponse
-        //            {
-        //                MeetingTitle = a.Meeting.Title,
-        //                StaffName = a.StaffEmail,
-        //                JoinTime = a.JoinTime ?? DateTime.MinValue,
-        //                ConfirmedAttendance = a.ConfirmAttendance,
-        //                ConfirmationTime = a.ConfirmationTime
-        //            })
-        //            .ToListAsync();
+//        var items = await query
+//            .OrderByDescending(a => a.JoinTime)
+//            .Skip((request.Page - 1) * request.PageSize)
+//            .Take(request.PageSize)
+//            .Select(a => new AttendanceReportResponse
+//            {
+//                MeetingTitle = a.Meeting.Title,
+//                StaffName = a.StaffEmail,
+//                JoinTime = a.JoinTime ?? DateTime.MinValue,
+//                ConfirmedAttendance = a.ConfirmAttendance,
+//                ConfirmationTime = a.ConfirmationTime
+//            })
+//            .ToListAsync();
 
-        //        var result = new PaginatedResponse<AttendanceReportResponse>
-        //        {
-        //            Items = items,
-        //            TotalCount = totalCount,
-        //            Page = request.Page,
-        //            PageSize = request.PageSize
-        //        };
+//        var result = new PaginatedResponse<AttendanceReportResponse>
+//        {
+//            Items = items,
+//            TotalCount = totalCount,
+//            Page = request.Page,
+//            PageSize = request.PageSize
+//        };
 
-        //        return ApiResponse<PaginatedResponse<AttendanceReportResponse>>.Success(result, "Attendance report fetched successfully");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return ApiResponse<PaginatedResponse<AttendanceReportResponse>>.Fail("Failed to fetch attendance report", ex.Message);
-        //    }
-        //}
+//        return ApiResponse<PaginatedResponse<AttendanceReportResponse>>.Success(result, "Attendance report fetched successfully");
+//    }
+//    catch (Exception ex)
+//    {
+//        return ApiResponse<PaginatedResponse<AttendanceReportResponse>>.Fail("Failed to fetch attendance report", ex.Message);
+//    }
+//}
 
-    }
-}

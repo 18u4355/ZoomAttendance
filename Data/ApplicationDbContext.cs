@@ -40,8 +40,9 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.CreatedBy).HasColumnName("created_by").IsRequired();
                 entity.Property(e => e.IsActive).HasColumnName("is_active").IsRequired();
                 entity.Property(e => e.ClosedAt).HasColumnName("closed_at");
-
-            });
+                entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+               
+            }); 
 
             // ATTENDANCE
             modelBuilder.Entity<MeetingAttendance>(entity =>
@@ -77,8 +78,10 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.ConfirmationExpiresAt)
                       .HasColumnName("confirmation_expires_at");
 
-                entity.Property(e => e.ClosedAt)
+               entity.Property(e => e.ClosedAt)
                       .HasColumnName("closed_at");
+                entity.Property(e => e.CreatedAt)
+                     .HasColumnName("created_at");
 
 
                 entity.HasOne<Meeting>()

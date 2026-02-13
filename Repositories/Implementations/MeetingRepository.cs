@@ -1,5 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Text;
 using ZoomAttendance.Data;
+using ZoomAttendance.Models;
 using ZoomAttendance.Models.Entities;
 using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
@@ -25,17 +27,35 @@ namespace ZoomAttendance.Repositories.Implementations
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(request.Title))
+                    return ApiResponse<bool>.Fail("Meeting title is required");
+
+                if (string.IsNullOrWhiteSpace(request.ZoomUrl))
+                    return ApiResponse<bool>.Fail("Zoom URL is required");
+
+                //  Validate URL format
+                if (!Uri.TryCreate(request.ZoomUrl, UriKind.Absolute, out var uri))
+                    return ApiResponse<bool>.Fail("Invalid Zoom URL format");
+
+                //  Validate Zoom domain
+                if (!uri.Host.Contains("zoom.us"))
+                    return ApiResponse<bool>.Fail("URL must be a valid Zoom meeting link");
+
+                //  Validate Zoom meeting pattern
+                if (!request.ZoomUrl.Contains("/j/"))
+                    return ApiResponse<bool>.Fail("Invalid Zoom meeting link format");
+
                 var meeting = new Meeting
                 {
                     Title = request.Title,
                     ZoomUrl = request.ZoomUrl,
-                    StartTime = request.StartTime,
-                    CreatedBy = hrId,
-                    IsActive = true
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
                 };
 
-                await _db.Meetings.AddAsync(meeting);
+                _db.Meetings.Add(meeting);
                 await _db.SaveChangesAsync();
+
                 return ApiResponse<bool>.Success(true, "Meeting created successfully");
             }
             catch (Exception ex)
@@ -43,30 +63,163 @@ namespace ZoomAttendance.Repositories.Implementations
                 return ApiResponse<bool>.Fail("Failed to create meeting", ex.Message);
             }
         }
-
-        public async Task<ApiResponse<List<MeetingResponse>>> GetActiveMeetingsAsync()
+        public async Task<ApiResponse<PaginatedResponse<MeetingResponse>>> GetAllMeetingsAsync(
+    int page = 1,
+    int pageSize = 10,
+    string status = null,
+    string search = null)
         {
-            try
-            {
-                var meetings = await _db.Meetings
-                    .Where(m => m.IsActive)
-                    .Select(m => new MeetingResponse
-                    {
-                        MeetingId = m.MeetingId,
-                        Title = m.Title,
-                        ZoomUrl = m.ZoomUrl,
-                        StartTime = m.StartTime,
-                        IsActive = m.IsActive
-                    })
-                    .ToListAsync();
+            var query = _db.Meetings.AsQueryable();
 
-                return ApiResponse<List<MeetingResponse>>.Success(meetings);
-            }
-            catch (Exception ex)
+            // Filter by status
+            if (!string.IsNullOrWhiteSpace(status))
             {
-                return ApiResponse<List<MeetingResponse>>.Fail("Failed to fetch active meetings", ex.Message);
+                if (status.ToLower() == "active")
+                    query = query.Where(m => m.IsActive);
+                else if (status.ToLower() == "closed")
+                    query = query.Where(m => !m.IsActive);
             }
+
+            // Filter by search
+            if (!string.IsNullOrWhiteSpace(search))
+                query = query.Where(m => m.Title.Contains(search));
+
+            var totalCount = await query.CountAsync();
+
+            var meetings = await query
+
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(m => new MeetingResponse
+                {
+                    MeetingId = m.MeetingId,
+                    Title = m.Title,
+                    IsActive = m.IsActive,
+                    TotalInvited = _db.Attendance.Count(a => a.MeetingId == m.MeetingId),
+                    TotalJoined = _db.Attendance.Count(a => a.MeetingId == m.MeetingId && a.JoinTime != null),
+                    TotalConfirmed = _db.Attendance.Count(a => a.MeetingId == m.MeetingId && a.ConfirmAttendance)
+                })
+                .ToListAsync();
+
+            var response = new PaginatedResponse<MeetingResponse>
+            {
+                Items = meetings,
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+            };
+
+            return ApiResponse<PaginatedResponse<MeetingResponse>>.Success(response);
+        }
+        public async Task<ApiResponse<MeetingDetailResponse>> GetMeetingByIdAsync(int meetingId)
+        {
+            var meeting = await _db.Meetings
+                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
+
+            if (meeting == null)
+                return ApiResponse<MeetingDetailResponse>.Fail("Meeting not found");
+
+            var totalInvited = await _db.Attendance.CountAsync(a => a.MeetingId == meetingId);
+            var totalJoined = await _db.Attendance.CountAsync(a => a.MeetingId == meetingId && a.JoinTime != null);
+            var totalConfirmed = await _db.Attendance.CountAsync(a => a.MeetingId == meetingId && a.ConfirmAttendance);
+
+            var response = new MeetingDetailResponse
+            {
+                MeetingId = meeting.MeetingId,
+                Title = meeting.Title,
+                IsActive = meeting.IsActive,
+                ClosedAt = meeting.ClosedAt,
+                ZoomUrl = meeting.ZoomUrl,
+                TotalInvited = totalInvited,
+                TotalJoined = totalJoined,
+                TotalConfirmed = totalConfirmed
+            };
+
+            return ApiResponse<MeetingDetailResponse>.Success(response);
         }
 
+
+        public async Task<ApiResponse<List<MeetingAttendanceResponse>>> GetMeetingAttendanceAsync(int meetingId)
+        {
+            var meetingExists = await _db.Meetings
+                .AnyAsync(m => m.MeetingId == meetingId);
+
+            if (!meetingExists)
+                return ApiResponse<List<MeetingAttendanceResponse>>.Fail("Meeting not found");
+
+            var attendanceList = await _db.Attendance
+                .Where(a => a.MeetingId == meetingId)
+                .Select(a => new MeetingAttendanceResponse
+                {
+                    AttendanceId = a.AttendanceId,
+                    StaffEmail = a.StaffEmail,
+                    JoinTime = a.JoinTime,
+                    ConfirmAttendance = a.ConfirmAttendance,
+                    ConfirmationTime = a.ConfirmationTime,
+                })
+                .ToListAsync();
+
+            return ApiResponse<List<MeetingAttendanceResponse>>
+                .Success(attendanceList);
+        }
+
+        public async Task<ApiResponse<DashboardSummaryResponse>> GetDashboardSummaryAsync()
+        {
+            var totalMeetings = await _db.Meetings.CountAsync();
+            var activeMeetings = await _db.Meetings.CountAsync(m => m.IsActive);
+            var closedMeetings = await _db.Meetings.CountAsync(m => !m.IsActive);
+
+            var totalInvited = await _db.Attendance.CountAsync();
+            var totalConfirmed = await _db.Attendance.CountAsync(a => a.ConfirmAttendance);
+
+            var response = new DashboardSummaryResponse
+            {
+                TotalMeetings = totalMeetings,
+                ActiveMeetings = activeMeetings,
+                ClosedMeetings = closedMeetings,
+                TotalInvited = totalInvited,
+                TotalConfirmed = totalConfirmed
+            };
+
+            return ApiResponse<DashboardSummaryResponse>.Success(response);
+        }
+
+        public async Task<byte[]?> ExportAttendanceAsync(int meetingId)
+        {
+            if (meetingId <= 0)
+                return null;
+
+            var meeting = await _db.Meetings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
+
+            if (meeting == null)
+                return null;
+
+            var attendanceList = await _db.Attendance
+                .AsNoTracking()
+                .Where(a => a.MeetingId == meetingId)
+                .ToListAsync();
+
+            if (!attendanceList.Any())
+                return null;
+
+            var csv = new StringBuilder();
+
+            csv.AppendLine("Staff Emaill,Join Time,Confirmed,Confirmed Time");
+
+            foreach (var a in attendanceList)
+            {
+                csv.AppendLine(
+                    $"{(a.StaffEmail)}," +
+                    $"{a.JoinTime?.ToString("yyyy-MM-dd HH:mm:ss")}," +
+                    $"{a.ConfirmAttendance}," +
+                    $"{a.ConfirmationTime?.ToString("yyyy-MM-dd HH:mm:ss")}"
+                );
+            }
+
+            return Encoding.UTF8.GetBytes(csv.ToString());
+        }
     }
 }
