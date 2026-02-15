@@ -7,7 +7,7 @@ using ZoomAttendance.Models.ResponseModels;
 
 [ApiController]
 [Route("api/meetings")]
-[Authorize(Roles = "HR")] // Only HR creates/ends meetings
+[Authorize(Roles = "HR")]
 public class MeetingsController : ControllerBase
 {
     private readonly IMeetingRepository _meetingRepo;

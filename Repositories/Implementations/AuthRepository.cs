@@ -26,14 +26,30 @@ namespace ZoomAttendance.Repositories.Implementations
         {
             try
             {
+                if (request == null)
+                    return ApiResponse<LoginResponse>.Fail("Invalid login request");
+
+                if (string.IsNullOrWhiteSpace(request.Email))
+                    return ApiResponse<LoginResponse>.Fail("Email is required");
+
+                if (!IsValidEmail(request.Email))
+                    return ApiResponse<LoginResponse>.Fail("Invalid email");
+
+                if (string.IsNullOrWhiteSpace(request.Password))
+                    return ApiResponse<LoginResponse>.Fail("Password is required");
+
+                var normalizedEmail = request.Email.Trim().ToLower();
+
                 var user = await _db.Users
-                    .FirstOrDefaultAsync(u => u.Email == request.Email);
+                    .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
 
                 if (user == null)
                     return ApiResponse<LoginResponse>.Fail("Invalid email or password");
 
-                // ⚠️ For now, plain text comparison (you can hash later)
-                bool isValid = BCrypt.Net.BCrypt.Verify(request.Password,user.PasswordHash);
+                bool isValidPassword = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+
+                if (!isValidPassword)
+                    return ApiResponse<LoginResponse>.Fail("Invalid email or password");
 
                 var token = GenerateJwtToken(user);
 
@@ -48,9 +64,9 @@ namespace ZoomAttendance.Repositories.Implementations
 
                 return ApiResponse<LoginResponse>.Success(response, "Login successful");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return ApiResponse<LoginResponse>.Fail("Login failed", ex.Message);
+                return ApiResponse<LoginResponse>.Fail("Login failed. Please try again.");
             }
         }
 
@@ -78,6 +94,26 @@ namespace ZoomAttendance.Repositories.Implementations
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        private bool IsValidEmail(string email)
+        {
+            try
+            {
+                var addr = new System.Net.Mail.MailAddress(email);
+                return addr.Address == email;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public Task<ApiResponse<string>> LogoutAsync()
+        {
+            return Task.FromResult(
+                ApiResponse<string>.Success("Logout successful")
+            );
         }
     }
 }

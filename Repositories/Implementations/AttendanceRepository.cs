@@ -20,7 +20,6 @@ namespace ZoomAttendance.Repositories.Implementations
             _emailService = emailService;
         }
 
-        // ✅ Generate Join Token and Send Direct Backend Link
         public async Task<ApiResponse<string>> GenerateJoinTokenAsync(int meetingId, string staffEmail)
         {
             try
@@ -41,17 +40,11 @@ namespace ZoomAttendance.Repositories.Implementations
 
                     JoinToken = joinToken,
                     JoinTime = DateTime.UtcNow,
-
-
-
-
-
                 };
 
                 _db.Attendance.Add(attendance);
                 await _db.SaveChangesAsync();
 
-                //  Direct backend link (NOT frontend)
                 var joinLink = $"http://207.180.246.69:7200/api/attendance/join?token={joinToken}";
 
                 await _emailService.SendEmailAsync(
@@ -70,7 +63,6 @@ namespace ZoomAttendance.Repositories.Implementations
             }
         }
 
-        // Validate Token + Confirm + Return Zoom URL
         public async Task<ApiResponse<string>> ValidateAndConfirmAsync(string token)
         {
             if (string.IsNullOrWhiteSpace(token))
@@ -102,7 +94,6 @@ namespace ZoomAttendance.Repositories.Implementations
             );
         }
 
-        // ✅ Close Meeting
         public async Task<ApiResponse<bool>> CloseMeetingAsync(int meetingId)
         {
             var meeting = await _db.Meetings
@@ -132,10 +123,8 @@ namespace ZoomAttendance.Repositories.Implementations
                 attendee.ConfirmationExpiresAt = DateTime.UtcNow.AddMinutes(15);
             }
 
-            // Save changes before sending emails
             await _db.SaveChangesAsync();
 
-            // Send confirmation emails
             foreach (var attendee in attendees)
             {
                 var confirmLink = $"http://207.180.246.69:7200/api/attendance/confirm?token={attendee.ConfirmationToken}";
@@ -154,7 +143,7 @@ namespace ZoomAttendance.Repositories.Implementations
         public async Task<(bool Success, string RedirectUrl)> ConfirmCloseMeetingAsync(string token)
         {
             if (string.IsNullOrWhiteSpace(token))
-                return (false, "http://localhost:3000/confirmation/invalid"); // frontend dev
+                return (false, "http://localhost:3000/confirmation/invalid"); 
 
             var attendance = await _db.Attendance
                 .Include(a => a.Meeting)
@@ -181,53 +170,3 @@ namespace ZoomAttendance.Repositories.Implementations
         }
     }
 }
-        //public async Task<ApiResponse<PaginatedResponse<AttendanceReportResponse>>> GetAttendanceReportAsync(AttendanceReportRequest request)
-        //{
-        //    try
-        //    {
-        //        var query = _db.Attendance
-        //            .Include(a => a.Meeting)
-        //            .Where(a => a.Meeting.ClosedAt != null &&
-        //                        a.Meeting.ClosedAt >= request.Start &&
-        //                        a.Meeting.ClosedAt <= request.End &&
-        //                        a.ConfirmAttendance); // Only confirmed attendees
-
-//        // Apply optional filters
-//        if (!string.IsNullOrEmpty(request.MeetingTitle))
-//            query = query.Where(a => a.Meeting.Title.Contains(request.MeetingTitle));
-
-//        if (!string.IsNullOrEmpty(request.StaffEmail))
-//            query = query.Where(a => a.StaffEmail.Contains(request.StaffEmail));
-
-//        var totalCount = await query.CountAsync();
-
-//        var items = await query
-//            .OrderByDescending(a => a.JoinTime)
-//            .Skip((request.Page - 1) * request.PageSize)
-//            .Take(request.PageSize)
-//            .Select(a => new AttendanceReportResponse
-//            {
-//                MeetingTitle = a.Meeting.Title,
-//                StaffName = a.StaffEmail,
-//                JoinTime = a.JoinTime ?? DateTime.MinValue,
-//                ConfirmedAttendance = a.ConfirmAttendance,
-//                ConfirmationTime = a.ConfirmationTime
-//            })
-//            .ToListAsync();
-
-//        var result = new PaginatedResponse<AttendanceReportResponse>
-//        {
-//            Items = items,
-//            TotalCount = totalCount,
-//            Page = request.Page,
-//            PageSize = request.PageSize
-//        };
-
-//        return ApiResponse<PaginatedResponse<AttendanceReportResponse>>.Success(result, "Attendance report fetched successfully");
-//    }
-//    catch (Exception ex)
-//    {
-//        return ApiResponse<PaginatedResponse<AttendanceReportResponse>>.Fail("Failed to fetch attendance report", ex.Message);
-//    }
-//}
-

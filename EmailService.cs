@@ -30,8 +30,10 @@ namespace ZoomAttendance.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Email sending failed: {ex.Message}");
-                throw; 
+                throw;
             }
         }
+       
+        }
+
     }
-}

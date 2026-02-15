@@ -8,50 +8,55 @@ using ZoomAttendance.Repositories.Implementations;
 using ZoomAttendance.Repositories.Interfaces;
 using ZoomAttendance.Services;
 
-var builder = WebApplication.CreateBuilder(args);
-
-
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
-);
-builder.Services.AddCors(options =>
+internal class Program
 {
-    options.AddPolicy("AllowAll", builder =>
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader());
-});
-
-
-builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-builder.Services.AddScoped<IMeetingRepository, MeetingRepository>();
-builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
-builder.Services.AddScoped<IEmailService, EmailService>();
-
-
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo
+    private static void Main(string[] args)
     {
-        Title = "Zoom Attendance API",
-        Version = "v1"
-    });
+        var builder = WebApplication.CreateBuilder(args);
 
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Enter: Bearer {your JWT token}"
-    });
 
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+        );
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowAll", builder =>
+                builder.AllowAnyOrigin()
+                       .AllowAnyMethod()
+                       .AllowAnyHeader());
+        });
+
+
+        builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+        builder.Services.AddScoped<IMeetingRepository, MeetingRepository>();
+        builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
+        builder.Services.AddScoped<ISettingsRepository, SettingsRepository>();
+        builder.Services.AddScoped<IEmailService, EmailService>();
+
+
+        builder.Services.AddControllers();
+        builder.Services.AddEndpointsApiExplorer();
+
+        builder.Services.AddSwaggerGen(c =>
+        {
+            c.SwaggerDoc("v1", new OpenApiInfo
+            {
+                Title = "Zoom Attendance API",
+                Version = "v1"
+            });
+
+            c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+            {
+                Name = "Authorization",
+                Type = SecuritySchemeType.Http,
+                Scheme = "Bearer",
+                BearerFormat = "JWT",
+                In = ParameterLocation.Header,
+                Description = "Enter: Bearer {your JWT token}"
+            });
+
+            c.AddSecurityRequirement(new OpenApiSecurityRequirement
+            {
         {
             new OpenApiSecurityScheme
             {
@@ -63,43 +68,51 @@ builder.Services.AddSwaggerGen(c =>
             },
             Array.Empty<string>()
         }
-    });
-});
+            });
+        });
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                    ValidAudience = builder.Configuration["Jwt:Audience"],
+                    IssuerSigningKey = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
+                    )
+                };
+            });
+
+        builder.Services.AddAuthorization();
+
+
+        var app = builder.Build();
+        app.UseCors(builder =>
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
-            )
-        };
-    });
+            builder.AllowAnyOrigin()
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+        });
 
-builder.Services.AddAuthorization();
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI();
+        }
+
+        app.UseHttpsRedirection();
 
 
-var app = builder.Build();
-app.UseCors();
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapControllers();
+
+        app.Run();
+    }
 }
-
-app.UseHttpsRedirection();
-
-
-
-app.UseAuthentication();
-app.UseAuthorization();
-app.MapControllers();
-
-app.Run();

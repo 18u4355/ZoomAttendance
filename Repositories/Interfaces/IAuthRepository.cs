@@ -6,5 +6,6 @@ namespace ZoomAttendance.Repositories.Interfaces
     public interface IAuthRepository
     {
         Task<ApiResponse<LoginResponse>> LoginAsync(LoginRequest request);
+        Task<ApiResponse<string>> LogoutAsync();
     }
 }

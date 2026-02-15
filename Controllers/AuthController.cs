@@ -27,5 +27,13 @@ namespace ZoomAttendance.Controllers
 
             return Ok(result);
         }
+
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout()
+        {
+            var result = await _authRepo.LogoutAsync();
+            return Ok(result);
+        }
     }
 }
