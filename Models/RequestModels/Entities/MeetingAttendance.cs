@@ -12,7 +12,8 @@ namespace ZoomAttendance.Models.Entities
         public DateTime? ConfirmationTime { get; set; }   
         public string? ConfirmationToken { get; set; }
         public string? JoinToken { get; set; }
-        public string StaffEmail { get; set; } = null!; // required
+        public string StaffEmail { get; set; } = null!;
+        public string StaffName { get; set; } = null!; // required
         public DateTime? ConfirmationExpiresAt { get; set; }
         public DateTime? ClosedAt { get; set; }
         public DateTime? CreatedAt { get; set; }
@@ -20,6 +21,6 @@ namespace ZoomAttendance.Models.Entities
 
         public Meeting? Meeting { get; set; }
 
-
+        public User User { get; set; }
     }
 }

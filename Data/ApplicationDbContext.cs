@@ -22,7 +22,7 @@ namespace ZoomAttendance.Data
                 entity.ToTable("users");
                 entity.HasKey(e => e.UserId);
                 entity.Property(e => e.UserId).HasColumnName("user_id");
-                entity.Property(e => e.FullName).HasColumnName("full_name").IsRequired();
+                entity.Property(e => e.StaffName).HasColumnName("staff_name").IsRequired();
                 entity.Property(e => e.Email).HasColumnName("email").IsRequired();
                 entity.Property(e => e.Role).HasColumnName("role").IsRequired();
                 entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired();
@@ -57,6 +57,10 @@ namespace ZoomAttendance.Data
 
                 entity.Property(e => e.StaffEmail)
                       .HasColumnName("staff_email")
+                      .IsRequired();
+
+                entity.Property(e => e.StaffName)
+                      .HasColumnName("staff_name")
                       .IsRequired();
 
                 entity.Property(e => e.JoinToken)

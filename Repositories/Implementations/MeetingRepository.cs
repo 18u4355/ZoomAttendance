@@ -33,15 +33,12 @@ namespace ZoomAttendance.Repositories.Implementations
                 if (string.IsNullOrWhiteSpace(request.ZoomUrl))
                     return ApiResponse<bool>.Fail("Zoom URL is required");
 
-                //  Validate URL format
                 if (!Uri.TryCreate(request.ZoomUrl, UriKind.Absolute, out var uri))
                     return ApiResponse<bool>.Fail("Invalid Zoom URL format");
 
-                //  Validate Zoom domain
                 if (!uri.Host.Contains("zoom.us"))
                     return ApiResponse<bool>.Fail("URL must be a valid Zoom meeting link");
 
-                //  Validate Zoom meeting pattern
                 if (!request.ZoomUrl.Contains("/j/"))
                     return ApiResponse<bool>.Fail("Invalid Zoom meeting link format");
 
@@ -95,9 +92,11 @@ namespace ZoomAttendance.Repositories.Implementations
                     MeetingId = m.MeetingId,
                     Title = m.Title,
                     IsActive = m.IsActive,
+                    ZoomUrl = m.ZoomUrl,
+                    CreatedAt = m.CreatedAt,
                     TotalInvited = _db.Attendance.Count(a => a.MeetingId == m.MeetingId),
                     TotalJoined = _db.Attendance.Count(a => a.MeetingId == m.MeetingId && a.JoinTime != null),
-                    TotalConfirmed = _db.Attendance.Count(a => a.MeetingId == m.MeetingId && a.ConfirmAttendance)
+                    TotalConfirmed = _db.Attendance.Count(a => a.MeetingId == m.MeetingId && a.ConfirmAttendance),
                 })
                 .ToListAsync();
 
@@ -129,11 +128,11 @@ namespace ZoomAttendance.Repositories.Implementations
                 MeetingId = meeting.MeetingId,
                 Title = meeting.Title,
                 IsActive = meeting.IsActive,
-                ClosedAt = meeting.ClosedAt,
                 ZoomUrl = meeting.ZoomUrl,
                 TotalInvited = totalInvited,
                 TotalJoined = totalJoined,
                 TotalConfirmed = totalConfirmed
+
             };
 
             return ApiResponse<MeetingDetailResponse>.Success(response);
@@ -153,6 +152,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 .Select(a => new MeetingAttendanceResponse
                 {
                     AttendanceId = a.AttendanceId,
+                    StaffName = a.User.StaffName,
                     StaffEmail = a.StaffEmail,
                     JoinTime = a.JoinTime,
                     ConfirmAttendance = a.ConfirmAttendance,
@@ -198,20 +198,32 @@ namespace ZoomAttendance.Repositories.Implementations
                 return null;
 
             var attendanceList = await _db.Attendance
-                .AsNoTracking()
-                .Where(a => a.MeetingId == meetingId)
-                .ToListAsync();
+              .AsNoTracking()
+              .Where(a => a.MeetingId == meetingId)
+              .Join(_db.Users,
+              attendance => attendance.StaffEmail,
+              user => user.Email,
+              (attendance, user) => new
+              {
+              user.StaffName,
+              attendance.StaffEmail,
+              attendance.JoinTime,
+              attendance.ConfirmAttendance,
+              attendance.ConfirmationTime
+          })
+    .ToListAsync();
 
             if (!attendanceList.Any())
                 return null;
 
             var csv = new StringBuilder();
 
-            csv.AppendLine("Staff Emaill,Join Time,Confirmed,Confirmed Time");
+            csv.AppendLine("Staff Name,Staff Emaill,Join Time,Confirmed,Confirmed Time");
 
             foreach (var a in attendanceList)
             {
                 csv.AppendLine(
+                    $"{(a.StaffName)}," +
                     $"{(a.StaffEmail)}," +
                     $"{a.JoinTime?.ToString("yyyy-MM-dd HH:mm:ss")}," +
                     $"{a.ConfirmAttendance}," +

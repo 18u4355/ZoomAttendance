@@ -27,7 +27,7 @@ public class SettingsRepository : ISettingsRepository
             var response = new AccountProfileResponse
             {
                 UserId = user.UserId,
-                FullName = user.FullName,
+                FullName = user.StaffName,
                 Email = user.Email,
                 Role = user.Role
             };
@@ -51,9 +51,9 @@ public class SettingsRepository : ISettingsRepository
             bool updated = false;
 
             
-            if (!string.IsNullOrWhiteSpace(request.FullName))
+            if (!string.IsNullOrWhiteSpace(request.StaffName))
             {
-                user.FullName = request.FullName.Trim();
+                user.StaffName = request.StaffName.Trim();
                 updated = true;
             }
 

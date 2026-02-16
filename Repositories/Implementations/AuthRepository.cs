@@ -56,7 +56,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 var response = new LoginResponse
                 {
                     UserId = user.UserId,
-                    FullName = user.FullName,
+                    FullName = user.StaffName,
                     Email = user.Email,
                     Role = user.Role,
                     Token = token
