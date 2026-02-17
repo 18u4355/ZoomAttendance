@@ -57,7 +57,10 @@ namespace ZoomAttendance.Repositories.Implementations
             }
             catch (Exception ex)
             {
-                return ApiResponse<bool>.Fail("Failed to create meeting", ex.Message);
+                return ApiResponse<bool>.Fail(
+                    "Failed to create meeting",
+                    ex.ToString()
+                );
             }
         }
         public async Task<ApiResponse<PaginatedResponse<MeetingResponse>>> GetAllMeetingsAsync(

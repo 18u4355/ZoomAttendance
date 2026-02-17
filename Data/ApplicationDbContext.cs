@@ -40,7 +40,8 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.IsActive).HasColumnName("is_active").IsRequired();
                 entity.Property(e => e.ClosedAt).HasColumnName("closed_at");
                 entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-               
+                entity.Property(e => e.IsClosed).HasColumnName("IsClosed");
+
             }); 
 
             // ATTENDANCE

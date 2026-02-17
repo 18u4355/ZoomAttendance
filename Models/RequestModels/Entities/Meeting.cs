@@ -5,23 +5,34 @@ namespace ZoomAttendance.Models.Entities
     [Table("meetings")]
     public class Meeting
     {
+        [Column("meeting_id")]
         public int MeetingId { get; set; }
 
-        public string? Title { get; set; }
+        [Column("title")]
+        public string Title { get; set; } = null!;
 
-        public string? ZoomUrl { get; set; }
+        [Column("zoom_url")]
+        public string ZoomUrl { get; set; } = null!;
 
+        [Column("start_time")]
+        public DateTime StartTime { get; set; }
+
+        [Column("created_by")]
         public int CreatedBy { get; set; }
 
-        public bool IsActive { get; set; }
+        [Column("is_active")]
+        public bool IsActive { get; set; } = true;
 
-        public DateTime? ClosedAt { get; set; }
-
+        [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        public bool? IsClosed { get; set; }
-       // public DateTime? UpdatedAt { get; set; }
+        [Column("updated_at")]
+        public DateTime? UpdatedAt { get; set; }
 
+        [Column("closed_at")]
+        public DateTime? ClosedAt { get; set; }
+
+        [Column("is_closed")]
+        public bool IsClosed { get; set; }
     }
-
 }
