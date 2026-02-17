@@ -36,7 +36,6 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.MeetingId).HasColumnName("meeting_id");
                 entity.Property(e => e.Title).HasColumnName("title").IsRequired();
                 entity.Property(e => e.ZoomUrl).HasColumnName("zoom_url").IsRequired();
-                entity.Property(e => e.StartTime).HasColumnName("start_time").IsRequired();
                 entity.Property(e => e.CreatedBy).HasColumnName("created_by").IsRequired();
                 entity.Property(e => e.IsActive).HasColumnName("is_active").IsRequired();
                 entity.Property(e => e.ClosedAt).HasColumnName("closed_at");
@@ -52,20 +51,20 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.AttendanceId).HasColumnName("attendance_id");
 
                 entity.Property(e => e.MeetingId)
-                      .HasColumnName("meeting_id")
-                      .IsRequired();
+                      .HasColumnName("meeting_id");
+
 
                 entity.Property(e => e.StaffEmail)
-                      .HasColumnName("staff_email")
-                      .IsRequired();
+                      .HasColumnName("staff_email");
+
 
                 entity.Property(e => e.StaffName)
-                      .HasColumnName("staff_name")
-                      .IsRequired();
+                      .HasColumnName("staff_name");
+
 
                 entity.Property(e => e.JoinToken)
-                      .HasColumnName("join_token")
-                      .IsRequired();
+                      .HasColumnName("join_token");
+                     
 
                 entity.Property(e => e.JoinTime)
                       .HasColumnName("join_time");

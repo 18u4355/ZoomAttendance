@@ -5,8 +5,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using ZoomAttendance.Data;
+using ZoomAttendance.Models.Entities;
 using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
+using ZoomAttendance.Models.ResponseModels.ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Repositories.Implementations
@@ -114,6 +116,63 @@ namespace ZoomAttendance.Repositories.Implementations
             return Task.FromResult(
                 ApiResponse<string>.Success("Logout successful")
             );
+        }
+
+        public async Task<ApiResponse<bool>> CreateStaffAsync(CreateStaffRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return ApiResponse<bool>.Fail("Email is required");
+
+            if (string.IsNullOrWhiteSpace(request.StaffName))
+                return ApiResponse<bool>.Fail("Full name is required");
+
+            var existing = await _db.Users
+                .FirstOrDefaultAsync(x => x.Email == request.Email);
+
+            if (existing != null)
+                return ApiResponse<bool>.Fail("User already exists");
+
+            var user = new User
+            {
+                Email = request.Email.Trim().ToLower(),
+                StaffName = request.StaffName.Trim(),
+                Role = "staff",
+
+                // not used — leave null if your column allows it
+                PasswordHash = null
+            };
+
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+
+            return ApiResponse<bool>.Success(true, "Staff created successfully");
+        }
+
+        public async Task<ApiResponse<List<staffResponse>>> GetAllStaffAsync()
+        {
+            try
+            {
+                var staff = await _db.Users
+                    .Where(u => u.Role.ToLower() == "staff")
+                    .Select(u => new staffResponse
+                    {
+                        Email = u.Email,
+                        StaffName = u.StaffName   // maps to staff_name column in DB
+                    })
+                    .ToListAsync();
+
+                if (staff.Count == 0)
+                    return ApiResponse<List<staffResponse>>
+                        .Fail("No staff found");
+
+                return ApiResponse<List<staffResponse>>
+                    .Success(staff, "Staff retrieved successfully");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<List<staffResponse>>
+                    .Fail("Failed to retrieve staff", ex.Message);
+            }
         }
     }
 }

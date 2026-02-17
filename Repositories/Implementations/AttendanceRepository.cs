@@ -69,8 +69,17 @@ namespace ZoomAttendance.Repositories.Implementations
                 return ApiResponse<string>.Fail("Token is required");
 
             var attendance = await _db.Attendance
-                .Include(a => a.Meeting)
-                .FirstOrDefaultAsync(a => a.JoinToken == token);
+                .Where(a => a.JoinToken == token)
+                .Select(a => new
+                {
+                    a.AttendanceId,
+                    a.ConfirmAttendance,
+                    a.ConfirmationExpiresAt,
+                    MeetingIsActive = a.Meeting.IsActive,
+                    MeetingClosedAt = a.Meeting.ClosedAt,
+                    ZoomUrl = a.Meeting.ZoomUrl
+                })
+                .FirstOrDefaultAsync();
 
             if (attendance == null)
                 return ApiResponse<string>.Fail("Invalid token");
@@ -78,18 +87,15 @@ namespace ZoomAttendance.Repositories.Implementations
             if (attendance.ConfirmAttendance)
                 return ApiResponse<string>.Fail("Attendance already confirmed");
 
-            if (!attendance.Meeting.IsActive || attendance.Meeting.ClosedAt != null)
+            if (!attendance.MeetingIsActive || attendance.MeetingClosedAt != null)
                 return ApiResponse<string>.Fail("Meeting has been closed");
 
             if (attendance.ConfirmationExpiresAt.HasValue &&
                 DateTime.UtcNow > attendance.ConfirmationExpiresAt.Value)
-                return ApiResponse<string>.Fail("Token has expired");
-
-
-            await _db.SaveChangesAsync();
+                return ApiResponse<string>.Fail("Token expired");
 
             return ApiResponse<string>.Success(
-                attendance.Meeting.ZoomUrl,
+                attendance.ZoomUrl ?? "",
                 "Attendance confirmed"
             );
         }

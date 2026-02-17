@@ -35,5 +35,29 @@ namespace ZoomAttendance.Controllers
             var result = await _authRepo.LogoutAsync();
             return Ok(result);
         }
+
+        [Authorize(Roles = "HR")]
+        [HttpPost("create-staff")]
+        public async Task<IActionResult> CreateStaff(CreateStaffRequest request)
+        {
+            var result = await _authRepo.CreateStaffAsync(request);
+
+            if (!result.IsSuccessful)
+                return BadRequest(result);
+
+            return Ok(result);
+        }
+
+        [Authorize(Roles = "HR")]
+        [HttpGet("staff")]
+        public async Task<IActionResult> GetStaff()
+        {
+            var result = await _authRepo.GetAllStaffAsync();
+
+            if (!result.IsSuccessful)
+                return BadRequest(result);
+
+            return Ok(result);
+        }
     }
 }

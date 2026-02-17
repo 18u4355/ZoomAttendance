@@ -1,5 +1,6 @@
 ﻿using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
+using ZoomAttendance.Models.ResponseModels.ZoomAttendance.Models.ResponseModels;
 
 namespace ZoomAttendance.Repositories.Interfaces
 {
@@ -7,5 +8,8 @@ namespace ZoomAttendance.Repositories.Interfaces
     {
         Task<ApiResponse<LoginResponse>> LoginAsync(LoginRequest request);
         Task<ApiResponse<string>> LogoutAsync();
+        Task<ApiResponse<bool>> CreateStaffAsync(CreateStaffRequest request);
+        Task<ApiResponse<List<staffResponse>>> GetAllStaffAsync();
+
     }
 }
