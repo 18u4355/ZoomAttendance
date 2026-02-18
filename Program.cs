@@ -103,7 +103,7 @@ internal class Program
         app.UseHttpsRedirection();
 
 
-        app.UseCors();
+        app.UseCors(); // added cors
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
