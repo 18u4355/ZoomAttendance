@@ -94,12 +94,7 @@ internal class Program
 
 
         var app = builder.Build();
-        app.UseCors(builder =>
-        {
-            builder.AllowAnyOrigin()
-                .AllowAnyMethod()
-                .AllowAnyHeader();
-        });
+        
 
         if (app.Environment.IsDevelopment())
         {
@@ -110,7 +105,7 @@ internal class Program
         app.UseHttpsRedirection();
 
 
-
+        app.UseCors(); // added cors
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
