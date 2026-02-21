@@ -1,8 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
 using ZoomAttendance.Data;
+using ZoomAttendance.Entities;
 using ZoomAttendance.Models;
 using ZoomAttendance.Models.Entities;
+using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
 using ZoomAttendance.Services;
@@ -20,6 +21,8 @@ namespace ZoomAttendance.Repositories.Implementations
             _emailService = emailService;
         }
 
+        // ── ONLINE FLOW ───────────────────────────────────────────────────────
+
         public async Task<ApiResponse<string>> GenerateJoinTokenAsync(int meetingId, string staffEmail)
         {
             try
@@ -31,13 +34,11 @@ namespace ZoomAttendance.Repositories.Implementations
                     return ApiResponse<string>.Fail("Meeting not found or inactive");
 
                 var joinToken = Guid.NewGuid().ToString();
-                var confirmationToken = Guid.NewGuid().ToString();
 
                 var attendance = new MeetingAttendance
                 {
                     MeetingId = meetingId,
                     StaffEmail = staffEmail,
-
                     JoinToken = joinToken,
                     JoinTime = DateTime.UtcNow,
                 };
@@ -94,10 +95,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 DateTime.UtcNow > attendance.ConfirmationExpiresAt.Value)
                 return ApiResponse<string>.Fail("Token expired");
 
-            return ApiResponse<string>.Success(
-                attendance.ZoomUrl ?? "",
-                "Attendance confirmed"
-            );
+            return ApiResponse<string>.Success(attendance.ZoomUrl ?? "", "Attendance confirmed");
         }
 
         public async Task<ApiResponse<bool>> CloseMeetingAsync(int meetingId)
@@ -111,16 +109,13 @@ namespace ZoomAttendance.Repositories.Implementations
             if (!meeting.IsActive)
                 return ApiResponse<bool>.Fail("Meeting already closed");
 
-            // Close meeting
             meeting.IsActive = false;
             meeting.ClosedAt = DateTime.UtcNow;
 
-            // Get attendees who actually joined
             var attendees = await _db.Attendance
                 .Where(a => a.MeetingId == meetingId && a.JoinTime != null)
                 .ToListAsync();
 
-            // Set confirmation token and expiry for each attendee
             foreach (var attendee in attendees)
             {
                 if (string.IsNullOrWhiteSpace(attendee.ConfirmationToken))
@@ -146,10 +141,11 @@ namespace ZoomAttendance.Repositories.Implementations
 
             return ApiResponse<bool>.Success(true, "Meeting closed and confirmation emails sent");
         }
+
         public async Task<(bool Success, string RedirectUrl)> ConfirmCloseMeetingAsync(string token)
         {
             if (string.IsNullOrWhiteSpace(token))
-                return (false, "http://localhost:3000/confirmation/invalid"); 
+                return (false, "http://localhost:3000/confirmation/invalid");
 
             var attendance = await _db.Attendance
                 .Include(a => a.Meeting)
@@ -173,6 +169,141 @@ namespace ZoomAttendance.Repositories.Implementations
             await _db.SaveChangesAsync();
 
             return (true, "http://localhost:3000/confirmation/success");
+        }
+
+        // ── PHYSICAL FLOW ─────────────────────────────────────────────────────
+
+        public async Task<ApiResponse<ScanResponse>> ScanAsync(ScanAttendanceRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Token))
+                return ApiResponse<ScanResponse>.Fail("Barcode token is required.");
+
+            var staff = await _db.Staff
+                .FirstOrDefaultAsync(s => s.BarcodeToken == request.Token);
+
+            if (staff == null)
+                return ApiResponse<ScanResponse>.Fail("Invalid barcode. Staff not found.");
+
+            var meeting = await _db.Meetings
+                .FirstOrDefaultAsync(m => m.MeetingId == request.MeetingId);
+
+            if (meeting == null)
+                return ApiResponse<ScanResponse>.Fail($"Meeting with ID {request.MeetingId} not found.");
+
+            var alreadyScanned = await _db.AttendanceLogs
+                .AnyAsync(a => a.StaffId == staff.Id && a.MeetingId == request.MeetingId);
+
+            if (alreadyScanned)
+                return ApiResponse<ScanResponse>.Fail("Attendance already recorded for this meeting.");
+
+            var log = new AttendanceLog
+            {
+                StaffId = staff.Id,
+                MeetingId = request.MeetingId,
+                ScannedAt = DateTime.UtcNow
+            };
+
+            _db.AttendanceLogs.Add(log);
+
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                return ApiResponse<ScanResponse>.Fail("Attendance already recorded for this meeting.");
+            }
+
+            return ApiResponse<ScanResponse>.Success(new ScanResponse
+            {
+                Success = true,
+                Message = "Attendance recorded successfully.",
+                StaffName = staff.FullName,
+                ScannedAt = log.ScannedAt
+            }, "Attendance recorded successfully.");
+        }
+
+        public async Task<ApiResponse<MeetingAttendanceResponsePhysical>> GetMeetingAttendanceAsync(int meetingId)
+        {
+            var meeting = await _db.Meetings
+                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
+
+            if (meeting == null)
+                return ApiResponse<MeetingAttendanceResponsePhysical>.Fail("Meeting not found.");
+
+            var logs = await _db.AttendanceLogs
+                .Include(a => a.Staff)
+                .Where(a => a.MeetingId == meetingId)
+                .OrderBy(a => a.ScannedAt)
+                .ToListAsync();
+
+            return ApiResponse<MeetingAttendanceResponsePhysical>.Success(new MeetingAttendanceResponsePhysical
+            {
+                MeetingId = meeting.MeetingId,
+                MeetingTitle = meeting.Title,
+                MeetingDate = meeting.CreatedAt,
+                TotalPhysicalAttendees = logs.Count,
+                Attendees = logs.Select(a => new AttendanceRecordResponse
+                {
+                    StaffId = a.StaffId,
+                    StaffName = a.Staff.FullName,
+                    Department = a.Staff.Department,
+                    ScannedAt = a.ScannedAt
+                }).ToList()
+            });
+        }
+
+        public async Task<ApiResponse<SendQrCodeResponse>> SendQrCodesAsync(SendQrCodeRequest request)
+        {
+            if (request.StaffEmails == null || request.StaffEmails.Count == 0)
+                return ApiResponse<SendQrCodeResponse>.Fail("At least one staff email must be selected.");
+
+            var meeting = await _db.Meetings
+                .FirstOrDefaultAsync(m => m.MeetingId == request.MeetingId);
+
+            if (meeting == null)
+                return ApiResponse<SendQrCodeResponse>.Fail($"Meeting with ID {request.MeetingId} not found.");
+
+            var selectedStaff = await _db.Staff
+                .Where(s => request.StaffEmails.Contains(s.Email))
+                .OrderBy(s => s.FullName)
+                .ToListAsync();
+
+            if (selectedStaff.Count == 0)
+                return ApiResponse<SendQrCodeResponse>.Fail("None of the selected staff emails were found.");
+
+            var results = new List<QrCodeEmailResult>();
+
+            foreach (var staff in selectedStaff)
+            {
+                var result = new QrCodeEmailResult
+                {
+                    StaffId = staff.Id,
+                    StaffName = staff.FullName,
+                    Email = staff.Email
+                };
+
+                try
+                {
+                    await _emailService.SendQrCodeEmailAsync(staff, meeting);
+                    result.Sent = true;
+                }
+                catch (Exception ex)
+                {
+                    result.Sent = false;
+                    result.FailureReason = ex.Message;
+                }
+
+                results.Add(result);
+            }
+
+            return ApiResponse<SendQrCodeResponse>.Success(new SendQrCodeResponse
+            {
+                TotalSelected = request.StaffEmails.Count,
+                TotalSent = results.Count(r => r.Sent),
+                TotalFailed = results.Count(r => !r.Sent),
+                Results = results
+            }, "QR codes processed.");
         }
     }
 }

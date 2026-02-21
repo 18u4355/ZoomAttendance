@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
+using ZoomAttendance.Entities;
 
 namespace ZoomAttendance.Models.Entities
 {
@@ -34,5 +35,7 @@ namespace ZoomAttendance.Models.Entities
 
         [Column("is_closed")]
         public bool IsClosed { get; set; }
+
+        public ICollection<AttendanceLog> AttendanceLogs { get; set; } = new List<AttendanceLog>();
     }
 }

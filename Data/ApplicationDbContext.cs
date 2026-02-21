@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using ZoomAttendance.Entities;
 using ZoomAttendance.Models.Entities;
 
 namespace ZoomAttendance.Data
@@ -11,6 +12,8 @@ namespace ZoomAttendance.Data
         public DbSet<User> Users => Set<User>();
         public DbSet<Meeting> Meetings => Set<Meeting>();
         public DbSet<MeetingAttendance> Attendance => Set<MeetingAttendance>();
+        public DbSet<Staff> Staff { get; set; }
+        public DbSet<AttendanceLog> AttendanceLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -99,6 +102,41 @@ namespace ZoomAttendance.Data
       .OnDelete(DeleteBehavior.Cascade);
 
             });
+        
+        // ── Staff ─────────────────────────────────────────────────────────
+        modelBuilder.Entity<Staff>()
+                .HasIndex(s => s.BarcodeToken)
+                .IsUnique();
+
+        modelBuilder.Entity<Staff>()
+                .HasIndex(s => s.Email)
+                .IsUnique();
+
+        modelBuilder.Entity<Staff>()
+                .HasIndex(s => s.FullName); // supports name-based dropdown lookup
+
+        // ── Meeting ───────────────────────────────────────────────────────
+        // Existing table — EF reads only, no migrations run against this table
+        modelBuilder.Entity<Meeting>()
+                .HasKey(m => m.MeetingId);
+
+        // ── AttendanceLog ─────────────────────────────────────────────────
+        modelBuilder.Entity<AttendanceLog>()
+                .HasIndex(a => new { a.StaffId, a.MeetingId
+    })
+                .IsUnique(); // prevents double scan
+
+    modelBuilder.Entity<AttendanceLog>()
+                .HasOne(a => a.Staff)
+                .WithMany(s => s.AttendanceLogs)
+                .HasForeignKey(a => a.StaffId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+    modelBuilder.Entity<AttendanceLog>()
+                .HasOne(a => a.Meeting)
+                .WithMany(m => m.AttendanceLogs)
+                .HasForeignKey(a => a.MeetingId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

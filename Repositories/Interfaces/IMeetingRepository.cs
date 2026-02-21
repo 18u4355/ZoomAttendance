@@ -6,12 +6,17 @@ namespace ZoomAttendance.Repositories.Interfaces
 {
     public interface IMeetingRepository
     {
+        // ── ONLINE FLOW ───────────────────────────────────────────────────────
         Task<ApiResponse<bool>> CreateMeetingAsync(CreateMeetingRequest request, int hrId);
-        Task<ApiResponse<PaginatedResponse<MeetingResponse>>> GetAllMeetingsAsync( int page = 1, int pageSize = 10, string status = null, string search = null);
+        Task<ApiResponse<PaginatedResponse<MeetingResponse>>> GetAllMeetingsAsync(int page, int pageSize, string status, string search);
         Task<ApiResponse<MeetingDetailResponse>> GetMeetingByIdAsync(int meetingId);
-
+        Task<ApiResponse<List<MeetingAttendanceResponse>>> GetMeetingAttendanceAsync(int meetingId);
         Task<ApiResponse<DashboardSummaryResponse>> GetDashboardSummaryAsync();
-        Task<byte[]> ExportAttendanceAsync(int meetingId);
+        Task<byte[]?> ExportAttendanceAsync(int meetingId);
 
+        // ── PHYSICAL FLOW ─────────────────────────────────────────────────────
+        Task<ApiResponse<List<StaffEmailResponse>>> GetAllStaffEmailsAsync();
+        Task<ApiResponse<MeetingPhysicalSummaryResponse>> GetMeetingPhysicalSummaryAsync(int meetingId);
+        Task<byte[]?> ExportPhysicalAttendanceAsync(int meetingId);
     }
 }
