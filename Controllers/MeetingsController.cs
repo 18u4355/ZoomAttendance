@@ -83,6 +83,23 @@ namespace ZoomAttendance.Controllers
             );
         }
 
+        [Authorize(Roles = "HR")]
+        [HttpPost("{meetingId}/send-invites")]
+        public async Task<IActionResult> SendInvites(
+int meetingId,
+[FromBody] SendMeetingInviteRequest request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Request body is required.");
+            }
+
+            var result = await _meetingRepo
+                .SendMeetingInvitesAsync(meetingId, request);
+
+            return StatusCode(result.IsSuccessful ? 200 : 400, result);
+        }
+
         // ── PHYSICAL FLOW ─────────────────────────────────────────────────────
 
         [HttpGet("staff/emails")]

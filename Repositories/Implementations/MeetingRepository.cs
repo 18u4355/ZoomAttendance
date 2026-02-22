@@ -8,6 +8,7 @@ using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
 using ZoomAttendance.Services;
+using static System.Net.WebRequestMethods;
 
 namespace ZoomAttendance.Repositories.Implementations
 {
@@ -15,11 +16,14 @@ namespace ZoomAttendance.Repositories.Implementations
     {
         private readonly ApplicationDbContext _db;
         private readonly IEmailService _emailService;
+        private readonly IAttendanceRepository _attendanceRepository;
 
-        public MeetingRepository(ApplicationDbContext db, IEmailService emailService)
+
+        public MeetingRepository(ApplicationDbContext db, IEmailService emailService, IAttendanceRepository attendanceRepository)
         {
             _db = db;
             _emailService = emailService;
+            _attendanceRepository = attendanceRepository;
         }
 
         // ── ONLINE FLOW ───────────────────────────────────────────────────────
@@ -47,8 +51,10 @@ namespace ZoomAttendance.Repositories.Implementations
                 {
                     Title = request.Title,
                     ZoomUrl = request.ZoomUrl,
+                    StartTime = request.StartTime,
                     IsActive = true,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = hrId
                 };
 
                 _db.Meetings.Add(meeting);
@@ -147,7 +153,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 .Select(a => new MeetingAttendanceResponse
                 {
                     AttendanceId = a.AttendanceId,
-                    StaffName = a.User.StaffName,
+                    StaffName = a.StaffName,
                     StaffEmail = a.StaffEmail,
                     JoinTime = a.JoinTime,
                     ConfirmAttendance = a.ConfirmAttendance,
@@ -218,6 +224,131 @@ namespace ZoomAttendance.Repositories.Implementations
             }
 
             return Encoding.UTF8.GetBytes(csv.ToString());
+        }
+
+        public async Task<ApiResponse<int>> SendMeetingInvitesAsync(
+    int meetingId,
+    SendMeetingInviteRequest request)
+        {
+            try
+            {
+                if (request.VirtualStaffEmails == null ||
+                    !request.VirtualStaffEmails.Any())
+                {
+                    return ApiResponse<int>.Fail(
+                        "At least one staff email must be provided.");
+                }
+
+                // Validate meeting
+                var meeting = await _db.Meetings
+                    .FirstOrDefaultAsync(m =>
+                        m.MeetingId == meetingId && m.IsActive);
+
+                if (meeting == null)
+                    return ApiResponse<int>.Fail(
+                        "Meeting not found or inactive");
+
+                // Fetch valid staff emails from DB
+                var validStaffEmails = await _db.Users
+                    .Where(u => u.Role.ToLower() == "staff")
+                    .Select(u => u.Email)
+                    .ToListAsync();
+
+                // Ensure all supplied emails exist
+                if (!request.VirtualStaffEmails
+                    .All(e => validStaffEmails.Contains(e)))
+                {
+                    return ApiResponse<int>.Fail(
+                        "One or more supplied emails are not valid staff.");
+                }
+
+                int sent = 0;
+
+                foreach (var email in request.VirtualStaffEmails)
+                {
+                    try
+                    {
+                        var result = await _attendanceRepository
+                            .GenerateJoinTokenAsync(
+                                meetingId,
+                                email,
+                                AttendanceChannel.Virtual);
+
+                        if (!result.IsSuccessful)
+                        {
+                            Console.WriteLine(result.Message);
+                            continue;
+                        }
+
+                        var token = result.Data;
+
+                        var joinLink =
+                           //$"https://localhost:7067/api/attendance/join?token={token}";//
+                            $"http://207.180.246.69:7200/api/attendance/join?token={token}";
+
+                        await SendZoomEmail(
+                            email,
+                            meeting.Title,
+                            joinLink);
+
+                        sent++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error sending to {email}");
+                        Console.WriteLine(ex.Message);
+                    }
+                }
+
+                return ApiResponse<int>.Success(
+                    sent,
+                    $"Virtual invites sent successfully. Total: {sent}");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<int>.Fail(
+                    $"Error sending invites: {ex.Message}");
+            }
+        }
+
+
+        private async Task SendZoomEmail(
+string email,
+string meetingTitle,
+string joinLink)
+        {
+            var body = $@"
+    <html>
+    <body style='font-family: Arial; background:#f4f6f9; padding:30px;'>
+        <div style='max-width:600px; margin:auto; background:white; padding:30px; border-radius:8px;'>
+
+            <h2 style='color:#2d8cff;'>Virtual Meeting Invitation</h2>
+
+            <p>You are invited to:</p>
+
+            <h3>{meetingTitle}</h3>
+
+            <p>
+                Click the button below to join the meeting:
+            </p>
+
+            <div style='text-align:center; margin:25px 0;'>
+                <a href='{joinLink}'
+                   style='background:#2d8cff;color:white;padding:12px 20px;
+                          text-decoration:none;border-radius:5px;'>
+                    Join Meeting
+                </a>
+            </div>
+
+        </div>
+    </body>
+    </html>";
+
+            await _emailService.SendEmailAsync(
+                email,
+                $"Meeting Invitation — {meetingTitle}",
+                body
+            );
         }
 
         // ── PHYSICAL FLOW ─────────────────────────────────────────────────────

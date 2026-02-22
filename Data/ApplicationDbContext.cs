@@ -28,7 +28,7 @@ namespace ZoomAttendance.Data
                 entity.Property(e => e.StaffName).HasColumnName("staff_name").IsRequired();
                 entity.Property(e => e.Email).HasColumnName("email").IsRequired();
                 entity.Property(e => e.Role).HasColumnName("role").IsRequired();
-                entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired();
+                entity.Property(e => e.PasswordHash).HasColumnName("password_hash");
             });
 
             //MEETINGS

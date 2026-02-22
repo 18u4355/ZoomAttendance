@@ -18,5 +18,8 @@ namespace ZoomAttendance.Repositories.Interfaces
         Task<ApiResponse<List<StaffEmailResponse>>> GetAllStaffEmailsAsync();
         Task<ApiResponse<MeetingPhysicalSummaryResponse>> GetMeetingPhysicalSummaryAsync(int meetingId);
         Task<byte[]?> ExportPhysicalAttendanceAsync(int meetingId);
+        Task<ApiResponse<int>> SendMeetingInvitesAsync(
+           int meetingId,
+           SendMeetingInviteRequest request);
     }
 }
