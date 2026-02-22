@@ -31,7 +31,9 @@ internal class Program
         builder.Services.AddScoped<IMeetingRepository, MeetingRepository>();
         builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         builder.Services.AddScoped<ISettingsRepository, SettingsRepository>();
+        builder.Services.AddScoped<IStaffRepository, StaffRepository>();
         builder.Services.AddScoped<IEmailService, EmailService>();
+
 
 
         builder.Services.AddControllers();

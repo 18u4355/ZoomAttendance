@@ -10,7 +10,7 @@
         public int TotalInvited { get; set; } 
         public int TotalJoined { get; set; }
         public int TotalConfirmed { get; set; }
-
+        public bool IsClosed { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }
