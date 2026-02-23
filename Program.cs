@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -14,28 +14,24 @@ internal class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
         );
         builder.Services.AddCors(options =>
         {
-            options.AddPolicy("AllowAll", builder =>
-                builder.AllowAnyOrigin()
-                       .AllowAnyMethod()
-                       .AllowAnyHeader());
+            options.AddPolicy("AllowAll", policy =>
+                policy.AllowAnyOrigin()
+                      .AllowAnyMethod()
+                      .AllowAnyHeader());
         });
 
-
+        // ── Repositories & Services ───────────────────────────────────────────
         builder.Services.AddScoped<IAuthRepository, AuthRepository>();
         builder.Services.AddScoped<IMeetingRepository, MeetingRepository>();
         builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         builder.Services.AddScoped<ISettingsRepository, SettingsRepository>();
         builder.Services.AddScoped<IStaffRepository, StaffRepository>();
         builder.Services.AddScoped<IEmailService, EmailService>();
-
-
-
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
 
@@ -46,7 +42,6 @@ internal class Program
                 Title = "Zoom Attendance API",
                 Version = "v1"
             });
-
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -56,20 +51,19 @@ internal class Program
                 In = ParameterLocation.Header,
                 Description = "Enter: Bearer {your JWT token}"
             });
-
             c.AddSecurityRequirement(new OpenApiSecurityRequirement
             {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
                 {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
+                    new OpenApiSecurityScheme
+                    {
+                        Reference = new OpenApiReference
+                        {
+                            Type = ReferenceType.SecurityScheme,
+                            Id = "Bearer"
+                        }
+                    },
+                    Array.Empty<string>()
                 }
-            },
-            Array.Empty<string>()
-        }
             });
         });
 
@@ -92,9 +86,7 @@ internal class Program
 
         builder.Services.AddAuthorization();
 
-
         var app = builder.Build();
-        
 
         if (app.Environment.IsDevelopment())
         {
@@ -104,10 +96,11 @@ internal class Program
 
         app.UseHttpsRedirection();
 
+        app.UseCors("AllowAll");
 
-        app.UseCors(); // added cors
         app.UseAuthentication();
         app.UseAuthorization();
+
         app.MapControllers();
 
         app.Run();

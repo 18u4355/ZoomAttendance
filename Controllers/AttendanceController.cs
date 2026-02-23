@@ -22,7 +22,6 @@ namespace ZoomAttendance.Controllers
             _context = context;
         }
 
-        // ── ONLINE FLOW ───────────────────────────────────────────────────────
 
         [HttpPost("generate-link")]
         [Authorize(Roles = "HR")]
@@ -60,8 +59,6 @@ namespace ZoomAttendance.Controllers
             var confirmResult = await _attendanceRepo.ConfirmCloseMeetingAsync(token);
             return Redirect(confirmResult.RedirectUrl);
         }
-
-        // ── PHYSICAL FLOW ─────────────────────────────────────────────────────
 
         [HttpPost("send-qrcodes")]
         [Authorize(Roles = "HR")]

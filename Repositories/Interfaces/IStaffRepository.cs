@@ -9,5 +9,6 @@ namespace ZoomAttendance.Repositories.Interfaces
         Task<ApiResponse<StaffResponseQr>> RegisterAsync(RegisterStaffRequest request);
         Task<ApiResponse<List<StaffResponseQr>>> GetAllAsync();
         Task<ApiResponse<StaffResponseQr>> GetByIdAsync(int id);
+        Task<ApiResponse<bool>> DeleteAsync(int id);
     }
 }

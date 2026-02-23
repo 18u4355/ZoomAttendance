@@ -58,6 +58,25 @@ namespace ZoomAttendance.Repositories.Implementations
             return ApiResponse<StaffResponseQr>.Success(MapToResponse(staff));
         }
 
+        public async Task<ApiResponse<bool>> DeleteAsync(int id)
+        {
+            var staff = await _context.Staff.FindAsync(id);
+            if (staff == null)
+                return ApiResponse<bool>.Fail($"Staff with ID {id} not found.");
+
+            // Check if staff has attendance logs — prevent orphan records
+            var hasAttendance = await _context.AttendanceLogs
+                .AnyAsync(a => a.StaffId == id);
+
+            if (hasAttendance)
+                return ApiResponse<bool>.Fail("Cannot delete staff with existing attendance records.");
+
+            _context.Staff.Remove(staff);
+            await _context.SaveChangesAsync();
+
+            return ApiResponse<bool>.Success(true, $"{staff.FullName} has been deleted successfully.");
+        }
+
         private static StaffResponseQr MapToResponse(Staff s) => new()
         {
             Id = s.Id,

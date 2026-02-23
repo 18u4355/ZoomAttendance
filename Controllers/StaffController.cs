@@ -18,7 +18,6 @@ namespace ZoomAttendance.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "HR")]
         public async Task<IActionResult> Register([FromBody] RegisterStaffRequest request)
         {
             var result = await _staffRepository.RegisterAsync(request);
@@ -26,7 +25,6 @@ namespace ZoomAttendance.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "HR")]
         public async Task<IActionResult> GetAll()
         {
             var result = await _staffRepository.GetAllAsync();
@@ -34,11 +32,17 @@ namespace ZoomAttendance.Controllers
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = "HR")]
         public async Task<IActionResult> GetById(int id)
         {
             var result = await _staffRepository.GetByIdAsync(id);
             return StatusCode(result.IsSuccessful ? 200 : 404, result);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var result = await _staffRepository.DeleteAsync(id);
+            return StatusCode(result.IsSuccessful ? 200 : 400, result);
         }
     }
 }
