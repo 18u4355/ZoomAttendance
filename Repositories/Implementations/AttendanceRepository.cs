@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json.Linq;
 using ZoomAttendance.Data;
 using ZoomAttendance.Entities;
 using ZoomAttendance.Models;
@@ -255,6 +256,52 @@ namespace ZoomAttendance.Repositories.Implementations
 
             return (true, "http://localhost:3000/confirmation/success");
         }
+
+        public async Task<ApiResponse<string>> GenerateAndSendLinkAsync(int meetingId, string staffEmail)
+        {
+            try
+            {
+                var meeting = await _db.Meetings
+                    .FirstOrDefaultAsync(m => m.MeetingId == meetingId && m.IsActive);
+
+                if (meeting == null)
+                    return ApiResponse<string>.Fail("Meeting not found or inactive");
+
+                var joinToken = Guid.NewGuid().ToString();
+                var confirmationToken = Guid.NewGuid().ToString();
+
+                var attendance = new MeetingAttendance
+                {
+                    MeetingId = meetingId,
+                    StaffEmail = staffEmail,
+
+                    JoinToken = joinToken,
+                    //JoinTime = DateTime.UtcNow,
+                    AttendedVia = AttendanceChannel.Virtual
+                };
+
+                _db.Attendance.Add(attendance);
+                await _db.SaveChangesAsync();
+
+                var joinLink = $"http://207.180.246.69:7200/api/attendance/join?token={joinToken}";
+
+                await _emailService.SendEmailAsync(
+                    staffEmail,
+                    "Meeting Invitation",
+                    $"You are invited to '{meeting.Title}'.<br/><br/>" +
+                    $"Click below to join:<br/>" +
+                    $"<a href='{joinLink}'>Join Meeting</a>"
+                );
+
+                return ApiResponse<string>.Success(joinToken, "Join link generated and email sent");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<string>.Fail("Failed to generate join link", ex.Message);
+            }
+        }
+
+        
 
         // ── PHYSICAL FLOW ─────────────────────────────────────────────────────
 

@@ -28,7 +28,7 @@ namespace ZoomAttendance.Controllers
         public async Task<IActionResult> GenerateJoinLink(int meetingId, string email)
         {
             var result = await _attendanceRepo
-                .GenerateJoinTokenAsync(meetingId, email, AttendanceChannel.Virtual);
+                .GenerateAndSendLinkAsync(meetingId, email);
 
             if (!result.IsSuccessful)
                 return BadRequest(result);
@@ -91,5 +91,7 @@ namespace ZoomAttendance.Controllers
             var result = await _attendanceRepo.GetAllStaffEmailsAsync();
             return StatusCode(result.IsSuccessful ? 200 : 404, result);
         }
+
+
     }
 }
