@@ -48,12 +48,6 @@ namespace ZoomAttendance.Controllers
             return StatusCode(result.IsSuccessful ? 200 : 404, result);
         }
 
-        [HttpPost("close/{meetingId}")]
-        public async Task<IActionResult> CloseMeeting([FromRoute] int meetingId)
-        {
-            var result = await _attendanceRepo.CloseMeetingAsync(meetingId);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
-        }
 
         [HttpGet("dashboard/summary")]
         public async Task<IActionResult> GetDashboardSummary()
