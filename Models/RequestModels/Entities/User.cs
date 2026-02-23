@@ -9,6 +9,6 @@ namespace ZoomAttendance.Models.Entities
         public string StaffName { get; set; } = null!;
         public string Email { get; set; } = null!;
         public string Role { get; set; } = null!;
-        public string PasswordHash { get; set; } = null!;
+        public string? PasswordHash { get; set; } = null!;
     }
 }

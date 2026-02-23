@@ -1,7 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using QRCoder;
+using ZoomAttendance.Data;
+using ZoomAttendance.Models;
 using ZoomAttendance.Models.RequestModels;
+using ZoomAttendance.Repositories.Implementations;
 using ZoomAttendance.Repositories.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace ZoomAttendance.Controllers
 {
@@ -10,10 +15,11 @@ namespace ZoomAttendance.Controllers
     public class AttendanceController : ControllerBase
     {
         private readonly IAttendanceRepository _attendanceRepo;
-
-        public AttendanceController(IAttendanceRepository attendanceRepo)
+        private readonly ApplicationDbContext _context;
+        public AttendanceController(IAttendanceRepository attendanceRepo, ApplicationDbContext context)
         {
             _attendanceRepo = attendanceRepo;
+            _context = context;
         }
 
         // ── ONLINE FLOW ───────────────────────────────────────────────────────
@@ -22,8 +28,12 @@ namespace ZoomAttendance.Controllers
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> GenerateJoinLink(int meetingId, string email)
         {
-            var result = await _attendanceRepo.GenerateJoinTokenAsync(meetingId, email);
-            if (!result.IsSuccessful) return BadRequest(result);
+            var result = await _attendanceRepo
+                .GenerateJoinTokenAsync(meetingId, email, AttendanceChannel.Virtual);
+
+            if (!result.IsSuccessful)
+                return BadRequest(result);
+
             return Ok(result);
         }
 
@@ -33,6 +43,15 @@ namespace ZoomAttendance.Controllers
             var result = await _attendanceRepo.ValidateAndConfirmAsync(token);
             if (!result.IsSuccessful) return BadRequest(result.Message);
             return Redirect(result.Data);
+        }
+
+        [Authorize(Roles = "HR")]
+        [HttpPost("close/{meetingId}")]
+        public async Task<IActionResult> CloseMeeting([FromRoute] int meetingId)
+        {
+            var result = await _attendanceRepo.CloseMeetingAsync(meetingId);
+            return StatusCode(result.IsSuccessful ? 200 : 400, result);
+
         }
 
         [HttpGet("confirm")]
@@ -65,6 +84,14 @@ namespace ZoomAttendance.Controllers
         public async Task<IActionResult> GetPhysicalAttendance(int meetingId)
         {
             var result = await _attendanceRepo.GetMeetingAttendanceAsync(meetingId);
+            return StatusCode(result.IsSuccessful ? 200 : 404, result);
+        }
+
+        [HttpGet("staff-emails")]
+        [Authorize(Roles = "HR")]
+        public async Task<IActionResult> GetAllStaffEmails()
+        {
+            var result = await _attendanceRepo.GetAllStaffEmailsAsync();
             return StatusCode(result.IsSuccessful ? 200 : 404, result);
         }
     }

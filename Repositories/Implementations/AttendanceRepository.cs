@@ -23,7 +23,7 @@ namespace ZoomAttendance.Repositories.Implementations
 
         // ── ONLINE FLOW ───────────────────────────────────────────────────────
 
-        public async Task<ApiResponse<string>> GenerateJoinTokenAsync(int meetingId, string staffEmail)
+        public async Task<ApiResponse<string>> GenerateJoinTokenAsync(int meetingId, string staffEmail, AttendanceChannel channel)
         {
             try
             {
@@ -33,34 +33,49 @@ namespace ZoomAttendance.Repositories.Implementations
                 if (meeting == null)
                     return ApiResponse<string>.Fail("Meeting not found or inactive");
 
+                var user = await _db.Users
+                    .FirstOrDefaultAsync(u => u.Email.ToLower() == staffEmail.ToLower());
+
+                if (user == null)
+                    return ApiResponse<string>.Fail("Staff not registered");
+
+                var existing = await _db.Attendance
+                    .FirstOrDefaultAsync(a =>
+                        a.MeetingId == meetingId &&
+                        a.StaffEmail == staffEmail && 
+                a.AttendedVia == channel );
+
+                if (existing != null)
+                    return ApiResponse<string>.Fail("Join token already exists for this staff");
+
                 var joinToken = Guid.NewGuid().ToString();
 
                 var attendance = new MeetingAttendance
                 {
                     MeetingId = meetingId,
                     StaffEmail = staffEmail,
+                    StaffName = user.StaffName,
                     JoinToken = joinToken,
-                    JoinTime = DateTime.UtcNow,
+                    AttendedVia = channel
+
                 };
 
                 _db.Attendance.Add(attendance);
                 await _db.SaveChangesAsync();
 
-                var joinLink = $"http://207.180.246.69:7200/api/attendance/join?token={joinToken}";
+                // ❌ EMAIL REMOVED FROM HERE
 
-                await _emailService.SendEmailAsync(
-                    staffEmail,
-                    "Meeting Invitation",
-                    $"You are invited to '{meeting.Title}'.<br/><br/>" +
-                    $"Click below to join:<br/>" +
-                    $"<a href='{joinLink}'>Join Meeting</a>"
-                );
-
-                return ApiResponse<string>.Success(joinToken, "Join link generated and email sent");
+                return ApiResponse<string>.Success(joinToken, "Join token generated successfully");
             }
             catch (Exception ex)
             {
-                return ApiResponse<string>.Fail("Failed to generate join link", ex.Message);
+                Console.WriteLine("=== GENERATE JOIN TOKEN ERROR ===");
+                Console.WriteLine(ex.ToString());
+
+                return ApiResponse<string>.Fail(
+                    "Failed to generate join token",
+                    ex.Message
+                );
             }
         }
 
@@ -70,32 +85,28 @@ namespace ZoomAttendance.Repositories.Implementations
                 return ApiResponse<string>.Fail("Token is required");
 
             var attendance = await _db.Attendance
-                .Where(a => a.JoinToken == token)
-                .Select(a => new
-                {
-                    a.AttendanceId,
-                    a.ConfirmAttendance,
-                    a.ConfirmationExpiresAt,
-                    MeetingIsActive = a.Meeting.IsActive,
-                    MeetingClosedAt = a.Meeting.ClosedAt,
-                    ZoomUrl = a.Meeting.ZoomUrl
-                })
-                .FirstOrDefaultAsync();
+                .Include(a => a.Meeting)
+                .FirstOrDefaultAsync(a => a.JoinToken == token);
 
             if (attendance == null)
                 return ApiResponse<string>.Fail("Invalid token");
 
-            if (attendance.ConfirmAttendance)
-                return ApiResponse<string>.Fail("Attendance already confirmed");
-
-            if (!attendance.MeetingIsActive || attendance.MeetingClosedAt != null)
+            if (!attendance.Meeting.IsActive || attendance.Meeting.ClosedAt != null)
                 return ApiResponse<string>.Fail("Meeting has been closed");
 
             if (attendance.ConfirmationExpiresAt.HasValue &&
                 DateTime.UtcNow > attendance.ConfirmationExpiresAt.Value)
                 return ApiResponse<string>.Fail("Token expired");
 
-            return ApiResponse<string>.Success(attendance.ZoomUrl ?? "", "Attendance confirmed");
+            // Only set join time here
+            attendance.JoinTime ??= DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            return ApiResponse<string>.Success(
+                attendance.Meeting.ZoomUrl ?? "",
+                "Join successful"
+            );
         }
 
         public async Task<ApiResponse<bool>> CloseMeetingAsync(int meetingId)
@@ -109,13 +120,19 @@ namespace ZoomAttendance.Repositories.Implementations
             if (!meeting.IsActive)
                 return ApiResponse<bool>.Fail("Meeting already closed");
 
+            // Close meeting
             meeting.IsActive = false;
             meeting.ClosedAt = DateTime.UtcNow;
 
+            // Get attendees who actually joined
             var attendees = await _db.Attendance
-                .Where(a => a.MeetingId == meetingId && a.JoinTime != null)
+                .Where(a =>
+                    a.MeetingId == meetingId &&
+                    a.JoinTime != null &&
+                    a.AttendedVia == AttendanceChannel.Virtual)
                 .ToListAsync();
 
+            // Set confirmation token and expiry for each attendee
             foreach (var attendee in attendees)
             {
                 if (string.IsNullOrWhiteSpace(attendee.ConfirmationToken))
@@ -125,19 +142,75 @@ namespace ZoomAttendance.Repositories.Implementations
             }
 
             await _db.SaveChangesAsync();
-
             foreach (var attendee in attendees)
             {
-                var confirmLink = $"http://207.180.246.69:7200/api/attendance/confirm?token={attendee.ConfirmationToken}";
+                try
+                {
+                    var confirmLink = $"http://207.180.246.69:7200/api/attendance/confirm?token={attendee.ConfirmationToken}";
+                    //var confirmLink = $"https://localhost:7067/api/attendance/confirm?token={attendee.ConfirmationToken}";//
 
-                await _emailService.SendEmailAsync(
-                    attendee.StaffEmail,
-                    "Confirm Your Attendance",
-                    $"Please confirm your attendance for '{meeting.Title}'.<br/>" +
-                    $"This link expires in 15 minutes:<br/>" +
-                    $"<a href='{confirmLink}'>Confirm Attendance</a>"
-                );
+                    var body = $@"
+                        <html>
+                        <body style='font-family: Arial, sans-serif; background:#f6f8fb; padding:30px;'>
+
+                            <div style='max-width:600px; margin:auto; background:white; padding:30px; border-radius:8px;'>
+
+                                <h2 style='color:#2d8cff;'>Attendance Confirmation</h2>
+
+                                <p>Hello,</p>
+
+                                <p>
+                                    Thank you for attending the meeting:
+                                </p>
+
+                                <h3 style='margin-bottom:10px;'>{meeting.Title}</h3>
+
+                                <p>
+                                    Kindly confirm your attendance by clicking the button below.
+                                </p>
+
+                                <p style='margin:25px 0;'>
+                                    <a href='{confirmLink}'
+                                        style='background:#2d8cff;
+                                                color:white;
+                                                padding:14px 20px;
+                                                text-decoration:none;
+                                                border-radius:6px;
+                                                font-weight:bold;
+                                                display:inline-block;'>
+                                        Confirm Attendance
+                                    </a>
+                                </p>
+
+                                <p style='font-size:13px; color:#666;'>
+                                    This confirmation link will expire in 15 minutes.
+                                </p>
+
+                                <hr style='margin:25px 0;' />
+
+                                <p style='margin-top:20px;'>
+                                    Regards,<br/>
+                                    HR Team
+                                </p>
+
+                            </div>
+
+                        </body>
+                        </html>";
+
+                    await _emailService.SendEmailAsync(
+                        attendee.StaffEmail,
+                        $"Confirm Attendance — {meeting.Title}",
+                        body
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Confirmation mail failed for {attendee.StaffEmail}: {ex.Message}");
+                }
             }
+
+
 
             return ApiResponse<bool>.Success(true, "Meeting closed and confirmation emails sent");
         }
@@ -147,21 +220,33 @@ namespace ZoomAttendance.Repositories.Implementations
             if (string.IsNullOrWhiteSpace(token))
                 return (false, "http://localhost:3000/confirmation/invalid");
 
-            var attendance = await _db.Attendance
-                .Include(a => a.Meeting)
-                .FirstOrDefaultAsync(a => a.ConfirmationToken == token);
+            var data = await _db.Attendance
+                .Where(a => a.ConfirmationToken == token)
+                .Select(a => new
+                {
+                    a.AttendanceId,
+                    a.ConfirmAttendance,
+                    a.ConfirmationExpiresAt,
+                    MeetingIsActive = a.Meeting.IsActive
+                })
+                .FirstOrDefaultAsync();
 
-            if (attendance == null)
+            if (data == null)
                 return (false, "http://localhost:3000/confirmation/invalid");
 
-            if (attendance.Meeting.IsActive)
+            if (data.MeetingIsActive)
                 return (false, "http://localhost:3000/confirmation/invalid");
 
-            if (attendance.ConfirmAttendance)
+            if (data.ConfirmAttendance)
                 return (false, "http://localhost:3000/confirmation/already");
 
-            if (attendance.ConfirmationExpiresAt == null || attendance.ConfirmationExpiresAt < DateTime.UtcNow)
+            if (data.ConfirmationExpiresAt == null ||
+                data.ConfirmationExpiresAt < DateTime.UtcNow)
                 return (false, "http://localhost:3000/confirmation/expired");
+
+            // now update separately
+
+            var attendance = await _db.Attendance.FindAsync(data.AttendanceId);
 
             attendance.ConfirmAttendance = true;
             attendance.ConfirmationTime = DateTime.UtcNow;
@@ -304,6 +389,18 @@ namespace ZoomAttendance.Repositories.Implementations
                 TotalFailed = results.Count(r => !r.Sent),
                 Results = results
             }, "QR codes processed.");
+        }
+
+        public async Task<ApiResponse<List<string>>> GetAllStaffEmailsAsync()
+        {
+            var emails = await _db.Users
+                .Select(u => u.Email)
+                .ToListAsync();
+
+            if (!emails.Any())
+                return ApiResponse<List<string>>.Fail("No staff emails found");
+
+            return ApiResponse<List<string>>.Success(emails, "Staff emails retrieved successfully");
         }
     }
 }
