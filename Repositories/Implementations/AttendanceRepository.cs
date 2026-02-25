@@ -350,7 +350,7 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 Success = true,
                 Message = "Attendance recorded successfully.",
-                StaffName = staff.FullName,
+                StaffName = staff.StaffName,
                 ScannedAt = log.ScannedAt
             }, "Attendance recorded successfully.");
         }
@@ -378,7 +378,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 Attendees = logs.Select(a => new AttendanceRecordResponse
                 {
                     StaffId = a.StaffId,
-                    StaffName = a.Staff.FullName,
+                    StaffName = a.Staff.StaffName,
                     Department = a.Staff.Department,
                     ScannedAt = a.ScannedAt
                 }).ToList()
@@ -398,7 +398,7 @@ namespace ZoomAttendance.Repositories.Implementations
 
             var selectedStaff = await _db.Staff
                 .Where(s => request.StaffEmails.Contains(s.Email))
-                .OrderBy(s => s.FullName)
+                .OrderBy(s => s.StaffName)
                 .ToListAsync();
 
             if (selectedStaff.Count == 0)
@@ -411,7 +411,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 var result = new QrCodeEmailResult
                 {
                     StaffId = staff.Id,
-                    StaffName = staff.FullName,
+                    StaffName = staff.StaffName,
                     Email = staff.Email
                 };
 

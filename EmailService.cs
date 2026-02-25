@@ -48,7 +48,7 @@ namespace ZoomAttendance.Services
             var htmlBody = $@"
                 <html>
                 <body style=""font-family: Arial, sans-serif; color: #333;"">
-                    <h2>Hello {staff.FullName},</h2>
+                    <h2>Hello {staff.StaffName},</h2>
                     <p>Please find your personal QR code below for the upcoming meeting:</p>
                     <p>
                         <strong>{meeting.Title}</strong><br/>

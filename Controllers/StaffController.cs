@@ -17,21 +17,23 @@ namespace ZoomAttendance.Controllers
             _staffRepository = staffRepository;
         }
 
-        [HttpPost]
+        // ── Physical staff (QR attendance) ────────────────────────────────────
+
+        [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterStaffRequest request)
         {
             var result = await _staffRepository.RegisterAsync(request);
             return StatusCode(result.IsSuccessful ? 201 : 400, result);
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
+        [HttpGet("physical")]
+        public async Task<IActionResult> GetAll([FromQuery] PaginatedStaffRequest request)
         {
-            var result = await _staffRepository.GetAllAsync();
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
+            var result = await _staffRepository.GetAllAsync(request);
+            return Ok(result);
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("physical/{id}")]
         public async Task<IActionResult> GetById(int id)
         {
             var result = await _staffRepository.GetByIdAsync(id);
@@ -43,6 +45,22 @@ namespace ZoomAttendance.Controllers
         {
             var result = await _staffRepository.DeleteAsync(id);
             return StatusCode(result.IsSuccessful ? 200 : 400, result);
+        }
+
+        // ── Virtual staff (Zoom attendance) ───────────────────────────────────
+
+        [HttpPost("virtual")]
+        public async Task<IActionResult> CreateStaff([FromBody] CreateStaffRequest request)
+        {
+            var result = await _staffRepository.CreateStaffAsync(request);
+            return Ok(result);
+        }
+
+        [HttpGet("virtual")]
+        public async Task<IActionResult> GetAllStaff([FromQuery] PaginatedStaffRequest request)
+        {
+            var result = await _staffRepository.GetAllStaffAsync(request);
+            return Ok(result);
         }
     }
 }

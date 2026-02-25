@@ -356,11 +356,11 @@ string joinLink)
         public async Task<ApiResponse<List<StaffEmailResponse>>> GetAllStaffEmailsAsync()
         {
             var staff = await _db.Staff
-                .OrderBy(s => s.FullName)
+                .OrderBy(s => s.StaffName)
                 .Select(s => new StaffEmailResponse
                 {
                     Id = s.Id,
-                    FullName = s.FullName,
+                    StaffName = s.StaffName,
                     Email = s.Email,
                     Department = s.Department
                 })
@@ -413,7 +413,7 @@ string joinLink)
             foreach (var log in logs)
             {
                 csv.AppendLine(
-                    $"{log.Staff.FullName}," +
+                    $"{log.Staff.StaffName}," +
                     $"{log.Staff.Department}," +
                     $"{log.Staff.Email}," +
                     $"{log.ScannedAt:yyyy-MM-dd HH:mm:ss}"

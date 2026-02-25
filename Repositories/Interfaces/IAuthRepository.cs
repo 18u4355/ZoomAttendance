@@ -8,8 +8,6 @@ namespace ZoomAttendance.Repositories.Interfaces
     {
         Task<ApiResponse<LoginResponse>> LoginAsync(LoginRequest request);
         Task<ApiResponse<string>> LogoutAsync();
-        Task<ApiResponse<bool>> CreateStaffAsync(CreateStaffRequest request);
-        Task<ApiResponse<List<staffResponse>>> GetAllStaffAsync();
-
+    
     }
 }
