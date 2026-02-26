@@ -12,10 +12,12 @@ namespace ZoomAttendance.Repositories.Interfaces
         Task<ApiResponse<PaginatedResponse<StaffResponseQr>>> GetAllAsync(PaginatedStaffRequest request);
         Task<ApiResponse<StaffResponseQr>> GetByIdAsync(int id);
         Task<ApiResponse<bool>> DeleteAsync(int id);
+        Task<ApiResponse<StaffAttendanceHistoryResponse>> GetPhysicalAttendanceHistoryAsync(string email);
 
         // ── Virtual staff (Zoom attendance) ───────────────────────────────────
         Task<ApiResponse<bool>> CreateStaffAsync(CreateStaffRequest request);
         Task<ApiResponse<PaginatedResponse<staffResponse>>> GetAllStaffAsync(PaginatedStaffRequest request);
-
+        Task<ApiResponse<bool>> DeleteVirtualStaffAsync(int id);
+        Task<ApiResponse<StaffAttendanceHistoryResponse>> GetVirtualAttendanceHistoryAsync(string email);
     }
 }

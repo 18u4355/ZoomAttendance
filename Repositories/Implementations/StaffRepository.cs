@@ -133,6 +133,47 @@ namespace ZoomAttendance.Repositories.Implementations
 
             return ApiResponse<bool>.Success(true, $"{staff.StaffName} has been deleted successfully.");
         }
+        public async Task<ApiResponse<StaffAttendanceHistoryResponse>> GetPhysicalAttendanceHistoryAsync(string email)
+        {
+            try
+            {
+                var staff = await _context.Staff
+                    .FirstOrDefaultAsync(s => s.Email.ToLower() == email.Trim().ToLower());
+
+                if (staff == null)
+                    return ApiResponse<StaffAttendanceHistoryResponse>.Fail("Staff not found.");
+
+                var logs = await _context.AttendanceLogs
+                    .Where(a => a.StaffId == staff.Id)
+                    .Include(a => a.Meeting)
+                    .OrderByDescending(a => a.ScannedAt)
+                    .ToListAsync();
+
+                var history = logs.Select(a => new AttendanceHistoryResponse
+                {
+                    MeetingName = a.Meeting.Title,
+                    MeetingDate = a.Meeting.CreatedAt,
+                    IsPresent = true // if log exists, they were present
+                }).ToList();
+
+                var response = new StaffAttendanceHistoryResponse
+                {
+                    StaffName = staff.StaffName,
+                    Email = staff.Email,
+                    Department = staff.Department,
+                    TotalMeetings = history.Count,
+                    TotalPresent = history.Count,
+                    TotalAbsent = 0, // physical = only logged when present
+                    History = history
+                };
+
+                return ApiResponse<StaffAttendanceHistoryResponse>.Success(response, "Attendance history retrieved.");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<StaffAttendanceHistoryResponse>.Fail("Failed to retrieve history.", ex.Message);
+            }
+        }
 
         // ── Virtual staff (Zoom attendance) ───────────────────────────────────
 
@@ -195,7 +236,6 @@ namespace ZoomAttendance.Repositories.Implementations
                 var search = request.Search?.Trim().ToLower();
 
                 var query = _context.Users
-                    .OrderByDescending(u => u.CreatedAt)
                     .Where(u => u.Role.ToLower() == "staff")
                     .AsQueryable();
 
@@ -209,17 +249,15 @@ namespace ZoomAttendance.Repositories.Implementations
 
                 var totalCount = await query.CountAsync();
 
-                if (totalCount == 0)
-                    return ApiResponse<PaginatedResponse<staffResponse>>.Fail("No staff found.");
-
                 var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
                 var items = await query
-                    .OrderByDescending(u => u.CreatedAt)
+                    .OrderByDescending(u => u.UserId)
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
                     .Select(u => new staffResponse
                     {
+                        UserId = u.UserId,
                         StaffName = u.StaffName,
                         Email = u.Email,
                         Department = u.Department
@@ -240,6 +278,75 @@ namespace ZoomAttendance.Repositories.Implementations
             catch (Exception ex)
             {
                 return ApiResponse<PaginatedResponse<staffResponse>>.Fail("Failed to retrieve staff.", ex.Message);
+            }
+        }
+        public async Task<ApiResponse<bool>> DeleteVirtualStaffAsync(int id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+                return ApiResponse<bool>.Fail($"Staff with ID {id} not found.");
+
+            if (user.Role.ToLower() != "staff")
+                return ApiResponse<bool>.Fail("User is not a staff member.");
+
+            var hasAttendance = await _context.Attendance
+                .AnyAsync(a => a.StaffEmail == user.Email);
+
+            if (hasAttendance)
+                return ApiResponse<bool>.Fail("Cannot delete staff with existing attendance records.");
+
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+
+            return ApiResponse<bool>.Success(true, $"{user.StaffName} has been deleted successfully.");
+        }
+        public async Task<ApiResponse<StaffAttendanceHistoryResponse>> GetVirtualAttendanceHistoryAsync(string email)
+        {
+            try
+            {
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email.ToLower() == email.Trim().ToLower()
+                                           && u.Role.ToLower() == "staff");
+
+                if (user == null)
+                    return ApiResponse<StaffAttendanceHistoryResponse>.Fail("Staff not found.");
+
+                // All meetings
+                var allMeetings = await _context.Meetings.ToListAsync();
+
+                // Meetings this staff attended
+                var attended = await _context.Attendance
+                    .Where(a => a.StaffEmail.ToLower() == email.Trim().ToLower()
+                             && a.ConfirmAttendance == true)
+                    .ToListAsync();
+
+                var attendedMeetingIds = attended.Select(a => a.MeetingId).ToHashSet();
+
+                var history = allMeetings
+                    .OrderByDescending(m => m.CreatedAt)
+                    .Select(m => new AttendanceHistoryResponse
+                    {
+                        MeetingName = m.Title,
+                        MeetingDate = m.CreatedAt,
+                        IsPresent = attendedMeetingIds.Contains(m.MeetingId)
+                    }).ToList();
+
+                var response = new StaffAttendanceHistoryResponse
+                {
+                    StaffName = user.StaffName,
+                    Email = user.Email,
+                    Department = user.Department ?? string.Empty,
+                    TotalMeetings = history.Count,
+                    TotalPresent = history.Count(h => h.IsPresent),
+                    TotalAbsent = history.Count(h => !h.IsPresent),
+                    History = history
+                };
+
+                return ApiResponse<StaffAttendanceHistoryResponse>.Success(response, "Attendance history retrieved.");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<StaffAttendanceHistoryResponse>.Fail("Failed to retrieve history.", ex.Message);
             }
         }
         // ── Private helpers ───────────────────────────────────────────────────

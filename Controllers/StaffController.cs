@@ -40,11 +40,17 @@ namespace ZoomAttendance.Controllers
             return StatusCode(result.IsSuccessful ? 200 : 404, result);
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("Physical/{id}")]
         public async Task<IActionResult> Delete(int id)
         {
             var result = await _staffRepository.DeleteAsync(id);
             return StatusCode(result.IsSuccessful ? 200 : 400, result);
+        }
+        [HttpGet("physical/history/{email}")]
+        public async Task<IActionResult> GetPhysicalHistory(string email)
+        {
+            var result = await _staffRepository.GetPhysicalAttendanceHistoryAsync(email);
+            return StatusCode(result.IsSuccessful ? 200 : 404, result);
         }
 
         // ── Virtual staff (Zoom attendance) ───────────────────────────────────
@@ -61,6 +67,18 @@ namespace ZoomAttendance.Controllers
         {
             var result = await _staffRepository.GetAllStaffAsync(request);
             return Ok(result);
+        }
+        [HttpDelete("virtual/{id}")]
+        public async Task<IActionResult> DeleteVirtualStaff(int id)
+        {
+            var result = await _staffRepository.DeleteVirtualStaffAsync(id);
+            return StatusCode(result.IsSuccessful ? 200 : 400, result);
+        }
+        [HttpGet("virtual/history/{email}")]
+        public async Task<IActionResult> GetVirtualHistory(string email)
+        {
+            var result = await _staffRepository.GetVirtualAttendanceHistoryAsync(email);
+            return StatusCode(result.IsSuccessful ? 200 : 404, result);
         }
     }
 }

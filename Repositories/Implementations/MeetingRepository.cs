@@ -90,6 +90,7 @@ namespace ZoomAttendance.Repositories.Implementations
             var totalCount = await query.CountAsync();
 
             var meetings = await query
+                .OrderByDescending(s => s.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(m => new MeetingResponse
