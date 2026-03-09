@@ -1,453 +1,390 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json.Linq;
-using ZoomAttendance.Data;
-using ZoomAttendance.Entities;
-using ZoomAttendance.Models;
-using ZoomAttendance.Models.Entities;
+﻿// Repositories/Implementations/AttendanceRepository.cs
+// Full redraft — checkout removed, geofence moved to SP
+
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using System.Data;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using ZoomAttendance.Helpers;
 using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
-using ZoomAttendance.Services;
 
 namespace ZoomAttendance.Repositories.Implementations
 {
     public class AttendanceRepository : IAttendanceRepository
     {
-        private readonly ApplicationDbContext _db;
-        private readonly IEmailService _emailService;
+        private readonly string _connectionString;
+        private readonly IConfiguration _configuration;
 
-        public AttendanceRepository(ApplicationDbContext db, IEmailService emailService)
+        public AttendanceRepository(IConfiguration configuration)
         {
-            _db = db;
-            _emailService = emailService;
+            _configuration = configuration;
+            _connectionString = configuration.GetConnectionString("DefaultConnection")!;
         }
 
-        // ── ONLINE FLOW ───────────────────────────────────────────────────────
-
-        public async Task<ApiResponse<string>> GenerateJoinTokenAsync(int meetingId, string staffEmail, AttendanceChannel channel)
+        // ── Initialize ────────────────────────────────────────────────────────
+        public async Task InitializeAsync(int meetingId, int staffId, string mode)
         {
-            try
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_InitializeAttendance", connection)
             {
-                var meeting = await _db.Meetings
-                    .FirstOrDefaultAsync(m => m.MeetingId == meetingId && m.IsActive);
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@StaffId", staffId);
+            command.Parameters.AddWithValue("@Mode", mode);
 
-                if (meeting == null)
-                    return ApiResponse<string>.Fail("Meeting not found or inactive");
-
-                var user = await _db.Users
-                    .FirstOrDefaultAsync(u => u.Email.ToLower() == staffEmail.ToLower());
-
-                if (user == null)
-                    return ApiResponse<string>.Fail("Staff not registered");
-
-                var existing = await _db.Attendance
-                    .FirstOrDefaultAsync(a =>
-                        a.MeetingId == meetingId &&
-                        a.StaffEmail == staffEmail && 
-                a.AttendedVia == channel );
-
-                if (existing != null)
-                    return ApiResponse<string>.Fail("Join token already exists for this staff");
-
-                var joinToken = Guid.NewGuid().ToString();
-
-                var attendance = new MeetingAttendance
-                {
-                    MeetingId = meetingId,
-                    StaffEmail = staffEmail,
-                    StaffName = user.StaffName,
-                    JoinToken = joinToken,
-                    AttendedVia = channel
-
-                };
-
-                _db.Attendance.Add(attendance);
-                await _db.SaveChangesAsync();
-
-                // ❌ EMAIL REMOVED FROM HERE
-
-                return ApiResponse<string>.Success(joinToken, "Join token generated successfully");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("=== GENERATE JOIN TOKEN ERROR ===");
-                Console.WriteLine(ex.ToString());
-
-                return ApiResponse<string>.Fail(
-                    "Failed to generate join token",
-                    ex.Message
-                );
-            }
+            await connection.OpenAsync();
+            await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<ApiResponse<string>> ValidateAndConfirmAsync(string token)
+        // ── Physical Check-In ─────────────────────────────────────────────────
+        public async Task<CheckInResponse> PhysicalCheckInAsync(string token, decimal latitude, decimal longitude)
         {
-            if (string.IsNullOrWhiteSpace(token))
-                return ApiResponse<string>.Fail("Token is required");
+            var claims = ValidateInviteToken(token);
+            var staffId = int.Parse(claims.First(c => c.Type == "staffId").Value);
+            var meetingId = int.Parse(claims.First(c => c.Type == "meetingId").Value);
 
-            var attendance = await _db.Attendance
-                .Include(a => a.Meeting)
-                .FirstOrDefaultAsync(a => a.JoinToken == token);
-
-            if (attendance == null)
-                return ApiResponse<string>.Fail("Invalid token");
-
-            if (!attendance.Meeting.IsActive || attendance.Meeting.ClosedAt != null)
-                return ApiResponse<string>.Fail("Meeting has been closed");
-
-            if (attendance.ConfirmationExpiresAt.HasValue &&
-                DateTime.UtcNow > attendance.ConfirmationExpiresAt.Value)
-                return ApiResponse<string>.Fail("Token expired");
-
-            // Only set join time here
-            attendance.JoinTime ??= DateTime.UtcNow;
-
-            await _db.SaveChangesAsync();
-
-            return ApiResponse<string>.Success(
-                attendance.Meeting.ZoomUrl ?? "",
-                "Join successful"
-            );
-        }
-
-        public async Task<ApiResponse<bool>> CloseMeetingAsync(int meetingId)
-        {
-            var meeting = await _db.Meetings
-                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
-
-            if (meeting == null)
-                return ApiResponse<bool>.Fail("Meeting not found");
-
-            if (!meeting.IsActive)
-                return ApiResponse<bool>.Fail("Meeting already closed");
-
-            // Close meeting
-            meeting.IsActive = false;
-            meeting.ClosedAt = DateTime.UtcNow;
-
-            // Get attendees who actually joined
-            var attendees = await _db.Attendance
-                .Where(a =>
-                    a.MeetingId == meetingId &&
-                    a.JoinTime != null &&
-                    a.AttendedVia == AttendanceChannel.Virtual)
-                .ToListAsync();
-
-            // Set confirmation token and expiry for each attendee
-            foreach (var attendee in attendees)
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_PhysicalCheckIn", connection)
             {
-                if (string.IsNullOrWhiteSpace(attendee.ConfirmationToken))
-                    attendee.ConfirmationToken = Guid.NewGuid().ToString();
-
-                attendee.ConfirmationExpiresAt = DateTime.UtcNow.AddMinutes(15);
-            }
-
-            await _db.SaveChangesAsync();
-            foreach (var attendee in attendees)
-            {
-                try
-                {
-                    var confirmLink = $"http://207.180.246.69:7200/api/attendance/confirm?token={attendee.ConfirmationToken}";
-                    //var confirmLink = $"https://localhost:7067/api/attendance/confirm?token={attendee.ConfirmationToken}";//
-
-                    var body = $@"
-                        <html>
-                        <body style='font-family: Arial, sans-serif; background:#f6f8fb; padding:30px;'>
-
-                            <div style='max-width:600px; margin:auto; background:white; padding:30px; border-radius:8px;'>
-
-                                <h2 style='color:#2d8cff;'>Attendance Confirmation</h2>
-
-                                <p>Hello,</p>
-
-                                <p>
-                                    Thank you for attending the meeting:
-                                </p>
-
-                                <h3 style='margin-bottom:10px;'>{meeting.Title}</h3>
-
-                                <p>
-                                    Kindly confirm your attendance by clicking the button below.
-                                </p>
-
-                                <p style='margin:25px 0;'>
-                                    <a href='{confirmLink}'
-                                        style='background:#2d8cff;
-                                                color:white;
-                                                padding:14px 20px;
-                                                text-decoration:none;
-                                                border-radius:6px;
-                                                font-weight:bold;
-                                                display:inline-block;'>
-                                        Confirm Attendance
-                                    </a>
-                                </p>
-
-                                <p style='font-size:13px; color:#666;'>
-                                    This confirmation link will expire in 15 minutes.
-                                </p>
-
-                                <hr style='margin:25px 0;' />
-
-                                <p style='margin-top:20px;'>
-                                    Regards,<br/>
-                                    HR Team
-                                </p>
-
-                            </div>
-
-                        </body>
-                        </html>";
-
-                    await _emailService.SendEmailAsync(
-                        attendee.StaffEmail,
-                        $"Confirm Attendance — {meeting.Title}",
-                        body
-                    );
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Confirmation mail failed for {attendee.StaffEmail}: {ex.Message}");
-                }
-            }
-
-
-
-            return ApiResponse<bool>.Success(true, "Meeting closed and confirmation emails sent");
-        }
-
-        public async Task<(bool Success, string RedirectUrl)> ConfirmCloseMeetingAsync(string token)
-        {
-            if (string.IsNullOrWhiteSpace(token))
-                return (false, "http://localhost:3000/confirmation/invalid");
-
-            var data = await _db.Attendance
-                .Where(a => a.ConfirmationToken == token)
-                .Select(a => new
-                {
-                    a.AttendanceId,
-                    a.ConfirmAttendance,
-                    a.ConfirmationExpiresAt,
-                    MeetingIsActive = a.Meeting.IsActive
-                })
-                .FirstOrDefaultAsync();
-
-            if (data == null)
-                return (false, "http://localhost:3000/confirmation/invalid");
-
-            if (data.MeetingIsActive)
-                return (false, "http://localhost:3000/confirmation/invalid");
-
-            if (data.ConfirmAttendance)
-                return (false, "http://localhost:3000/confirmation/already");
-
-            if (data.ConfirmationExpiresAt == null ||
-                data.ConfirmationExpiresAt < DateTime.UtcNow)
-                return (false, "http://localhost:3000/confirmation/expired");
-
-            // now update separately
-
-            var attendance = await _db.Attendance.FindAsync(data.AttendanceId);
-
-            attendance.ConfirmAttendance = true;
-            attendance.ConfirmationTime = DateTime.UtcNow;
-
-            await _db.SaveChangesAsync();
-
-            return (true, "http://localhost:3000/confirmation/success");
-        }
-
-        public async Task<ApiResponse<string>> GenerateAndSendLinkAsync(int meetingId, string staffEmail)
-        {
-            try
-            {
-                var meeting = await _db.Meetings
-                    .FirstOrDefaultAsync(m => m.MeetingId == meetingId && m.IsActive);
-
-                if (meeting == null)
-                    return ApiResponse<string>.Fail("Meeting not found or inactive");
-
-                var joinToken = Guid.NewGuid().ToString();
-                var confirmationToken = Guid.NewGuid().ToString();
-
-                var attendance = new MeetingAttendance
-                {
-                    MeetingId = meetingId,
-                    StaffEmail = staffEmail,
-
-                    JoinToken = joinToken,
-                    //JoinTime = DateTime.UtcNow,
-                    AttendedVia = AttendanceChannel.Virtual
-                };
-
-                _db.Attendance.Add(attendance);
-                await _db.SaveChangesAsync();
-
-                var joinLink = $"http://207.180.246.69:7200/api/attendance/join?token={joinToken}";
-
-                await _emailService.SendEmailAsync(
-                    staffEmail,
-                    "Meeting Invitation",
-                    $"You are invited to '{meeting.Title}'.<br/><br/>" +
-                    $"Click below to join:<br/>" +
-                    $"<a href='{joinLink}'>Join Meeting</a>"
-                );
-
-                return ApiResponse<string>.Success(joinToken, "Join link generated and email sent");
-            }
-            catch (Exception ex)
-            {
-                return ApiResponse<string>.Fail("Failed to generate join link", ex.Message);
-            }
-        }
-
-        
-
-        // ── PHYSICAL FLOW ─────────────────────────────────────────────────────
-
-        public async Task<ApiResponse<ScanResponse>> ScanAsync(ScanAttendanceRequest request)
-        {
-            if (string.IsNullOrWhiteSpace(request.Token))
-                return ApiResponse<ScanResponse>.Fail("Barcode token is required.");
-
-            var staff = await _db.Staff
-                .FirstOrDefaultAsync(s => s.BarcodeToken == request.Token);
-
-            if (staff == null)
-                return ApiResponse<ScanResponse>.Fail("Invalid barcode. Staff not found.");
-
-            var meeting = await _db.Meetings
-                .FirstOrDefaultAsync(m => m.MeetingId == request.MeetingId);
-
-            if (meeting == null)
-                return ApiResponse<ScanResponse>.Fail($"Meeting with ID {request.MeetingId} not found.");
-
-            var alreadyScanned = await _db.AttendanceLogs
-                .AnyAsync(a => a.StaffId == staff.Id && a.MeetingId == request.MeetingId);
-
-            if (alreadyScanned)
-                return ApiResponse<ScanResponse>.Fail("Attendance already recorded for this meeting.");
-
-            var log = new AttendanceLog
-            {
-                StaffId = staff.Id,
-                MeetingId = request.MeetingId,
-                ScannedAt = DateTime.UtcNow
+                CommandType = CommandType.StoredProcedure
             };
 
-            _db.AttendanceLogs.Add(log);
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@StaffId", staffId);
+            command.Parameters.AddWithValue("@Latitude", latitude);
+            command.Parameters.AddWithValue("@Longitude", longitude);
 
-            try
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
             {
-                await _db.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                return ApiResponse<ScanResponse>.Fail("Attendance already recorded for this meeting.");
-            }
+                var errorCode = reader["ErrorCode"]?.ToString();
+                if (!string.IsNullOrEmpty(errorCode))
+                    throw new InvalidOperationException($"{errorCode}:{reader["ErrorMessage"]}");
 
-            return ApiResponse<ScanResponse>.Success(new ScanResponse
-            {
-                Success = true,
-                Message = "Attendance recorded successfully.",
-                StaffName = staff.StaffName,
-                ScannedAt = log.ScannedAt
-            }, "Attendance recorded successfully.");
-        }
-
-        public async Task<ApiResponse<MeetingAttendanceResponsePhysical>> GetMeetingAttendanceAsync(int meetingId)
-        {
-            var meeting = await _db.Meetings
-                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
-
-            if (meeting == null)
-                return ApiResponse<MeetingAttendanceResponsePhysical>.Fail("Meeting not found.");
-
-            var logs = await _db.AttendanceLogs
-                .Include(a => a.Staff)
-                .Where(a => a.MeetingId == meetingId)
-                .OrderBy(a => a.ScannedAt)
-                .ToListAsync();
-
-            return ApiResponse<MeetingAttendanceResponsePhysical>.Success(new MeetingAttendanceResponsePhysical
-            {
-                MeetingId = meeting.MeetingId,
-                MeetingTitle = meeting.Title,
-                MeetingDate = meeting.CreatedAt,
-                TotalPhysicalAttendees = logs.Count,
-                Attendees = logs.Select(a => new AttendanceRecordResponse
+                return new CheckInResponse
                 {
-                    StaffId = a.StaffId,
-                    StaffName = a.Staff.StaffName,
-                    Department = a.Staff.Department,
-                    ScannedAt = a.ScannedAt
-                }).ToList()
-            });
-        }
-
-        public async Task<ApiResponse<SendQrCodeResponse>> SendQrCodesAsync(SendQrCodeRequest request)
-        {
-            if (request.StaffEmails == null || request.StaffEmails.Count == 0)
-                return ApiResponse<SendQrCodeResponse>.Fail("At least one staff email must be selected.");
-
-            var meeting = await _db.Meetings
-                .FirstOrDefaultAsync(m => m.MeetingId == request.MeetingId);
-
-            if (meeting == null)
-                return ApiResponse<SendQrCodeResponse>.Fail($"Meeting with ID {request.MeetingId} not found.");
-
-            var selectedStaff = await _db.Staff
-                .Where(s => request.StaffEmails.Contains(s.Email))
-                .OrderBy(s => s.StaffName)
-                .ToListAsync();
-
-            if (selectedStaff.Count == 0)
-                return ApiResponse<SendQrCodeResponse>.Fail("None of the selected staff emails were found.");
-
-            var results = new List<QrCodeEmailResult>();
-
-            foreach (var staff in selectedStaff)
-            {
-                var result = new QrCodeEmailResult
-                {
-                    StaffId = staff.Id,
-                    StaffName = staff.StaffName,
-                    Email = staff.Email
+                    Status = reader["Status"].ToString()!,
+                    Message = "Checked in successfully."
                 };
-
-                try
-                {
-                    await _emailService.SendQrCodeEmailAsync(staff, meeting);
-                    result.Sent = true;
-                }
-                catch (Exception ex)
-                {
-                    result.Sent = false;
-                    result.FailureReason = ex.Message;
-                }
-
-                results.Add(result);
             }
 
-            return ApiResponse<SendQrCodeResponse>.Success(new SendQrCodeResponse
-            {
-                TotalSelected = request.StaffEmails.Count,
-                TotalSent = results.Count(r => r.Sent),
-                TotalFailed = results.Count(r => !r.Sent),
-                Results = results
-            }, "QR codes processed.");
+            throw new InvalidOperationException("Unexpected error during check-in.");
         }
 
-        public async Task<ApiResponse<List<string>>> GetAllStaffEmailsAsync()
+        // ── Virtual Join ──────────────────────────────────────────────────────
+        public async Task<VirtualJoinResponse> VirtualJoinAsync(string token)
         {
-            var emails = await _db.Users
-                .Select(u => u.Email)
-                .ToListAsync();
+            var claims = ValidateInviteToken(token);
+            var staffId = int.Parse(claims.First(c => c.Type == "staffId").Value);
+            var meetingId = int.Parse(claims.First(c => c.Type == "meetingId").Value);
 
-            if (!emails.Any())
-                return ApiResponse<List<string>>.Fail("No staff emails found");
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_VirtualJoin", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-            return ApiResponse<List<string>>.Success(emails, "Staff emails retrieved successfully");
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@StaffId", staffId);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                var errorCode = reader["ErrorCode"]?.ToString();
+                if (!string.IsNullOrEmpty(errorCode))
+                    throw new InvalidOperationException(reader["ErrorMessage"].ToString());
+
+                return new VirtualJoinResponse
+                {
+                    ZoomUrl = reader["ZoomUrl"].ToString()!,
+                    Message = "Attendance recorded. Redirecting to Zoom."
+                };
+            }
+
+            throw new InvalidOperationException("Unexpected error during virtual join.");
+        }
+
+        // ── Virtual End Confirm ───────────────────────────────────────────────
+        public async Task<CheckInResponse> VirtualEndConfirmAsync(string token)
+        {
+            var claims = ValidateEndConfirmToken(token);
+            var staffId = int.Parse(claims.First(c => c.Type == "staffId").Value);
+            var meetingId = int.Parse(claims.First(c => c.Type == "meetingId").Value);
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_VirtualEndConfirm", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@StaffId", staffId);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                var errorCode = reader["ErrorCode"]?.ToString();
+                if (!string.IsNullOrEmpty(errorCode))
+                    throw new InvalidOperationException(reader["ErrorMessage"].ToString());
+
+                return new CheckInResponse
+                {
+                    Status = "present",
+                    Message = "Attendance confirmed. Thank you."
+                };
+            }
+
+            throw new InvalidOperationException("Unexpected error during end confirmation.");
+        }
+
+        // ── Get Attendance By Meeting ─────────────────────────────────────────
+        public async Task<PagedAttendanceResponse> GetAttendanceAsync(int meetingId, AttendanceFilterRequest filter)
+        {
+            var records = new List<AttendanceResponse>();
+            int total = 0;
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetAttendanceByMeeting", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DepartmentId", (object?)filter.DepartmentId ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Page", filter.Page);
+            command.Parameters.AddWithValue("@Limit", filter.Limit);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                if (total == 0)
+                    total = reader.GetInt32(reader.GetOrdinal("TotalCount"));
+
+                records.Add(MapFromReader(reader));
+            }
+
+            return new PagedAttendanceResponse
+            {
+                Data = records,
+                Total = total,
+                Page = filter.Page,
+                Limit = filter.Limit,
+                TotalPages = (int)Math.Ceiling((double)total / filter.Limit)
+            };
+        }
+
+        // ── Get Summary ───────────────────────────────────────────────────────
+        public async Task<AttendanceSummaryResponse> GetSummaryAsync(int meetingId)
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetAttendanceSummary", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                return new AttendanceSummaryResponse
+                {
+                    Total = reader.GetInt32(reader.GetOrdinal("Total")),
+                    Present = reader.GetInt32(reader.GetOrdinal("Present")),
+                    Absent = reader.GetInt32(reader.GetOrdinal("Absent")),
+                    Late = reader.GetInt32(reader.GetOrdinal("Late")),
+                    LeftEarly = reader.GetInt32(reader.GetOrdinal("LeftEarly")),
+                    Joined = reader.GetInt32(reader.GetOrdinal("Joined")),
+                    CheckedIn = reader.GetInt32(reader.GetOrdinal("CheckedIn"))
+                };
+            }
+
+            return new AttendanceSummaryResponse();
+        }
+
+        // ── Manual Status Override ────────────────────────────────────────────
+        public async Task UpdateStatusAsync(int meetingId, int staffId, string status)
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_UpdateAttendanceStatus", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@StaffId", staffId);
+            command.Parameters.AddWithValue("@Status", status);
+
+            await connection.OpenAsync();
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // ── Export ────────────────────────────────────────────────────────────
+        public async Task<byte[]> ExportAsync(int meetingId, AttendanceFilterRequest filter)
+        {
+            var records = new List<AttendanceResponse>();
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_ExportAttendance", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DepartmentId", (object?)filter.DepartmentId ?? DBNull.Value);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                records.Add(new AttendanceResponse
+                {
+                    Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                    MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
+                    StaffId = reader.GetInt32(reader.GetOrdinal("StaffId")),
+                    StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
+                    StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
+                    DepartmentName = reader.GetString(reader.GetOrdinal("DepartmentName")),
+                    Mode = reader.GetString(reader.GetOrdinal("Mode")),
+                    Status = reader.GetString(reader.GetOrdinal("Status")),
+                    CheckInAt = reader.IsDBNull(reader.GetOrdinal("CheckInAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CheckInAt")),
+                    CheckInWithinFence = reader.IsDBNull(reader.GetOrdinal("CheckInWithinFence")) ? null : reader.GetBoolean(reader.GetOrdinal("CheckInWithinFence")),
+                    JoinedAt = reader.IsDBNull(reader.GetOrdinal("JoinedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("JoinedAt")),
+                    ConfirmedAt = reader.IsDBNull(reader.GetOrdinal("ConfirmedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConfirmedAt")),
+                });
+            }
+
+            var headers = new[]
+            {
+                "Staff Name", "Email", "Department", "Mode", "Status",
+                "Check-In Time", "Within Fence",
+                "Joined At", "Confirmed At"
+            };
+
+            var rows = records.Select(a => new List<object?>
+            {
+                a.StaffName,
+                a.StaffEmail,
+                a.DepartmentName,
+                a.Mode,
+                a.Status,
+                a.CheckInAt?.ToString("yyyy-MM-dd HH:mm:ss")   ?? "-",
+                a.CheckInWithinFence.HasValue ? (a.CheckInWithinFence.Value ? "Yes" : "No") : "-",
+                a.JoinedAt?.ToString("yyyy-MM-dd HH:mm:ss")    ?? "-",
+                a.ConfirmedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-",
+            });
+
+            return ExcelExportHelper.GenerateExcel("Attendance", headers, rows);
+        }
+
+        // ── Get Pending Virtual Confirms (for background job) ─────────────────
+        public async Task<List<PendingVirtualConfirm>> GetPendingVirtualConfirmsAsync()
+        {
+            var list = new List<PendingVirtualConfirm>();
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetPendingVirtualConfirms", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                list.Add(new PendingVirtualConfirm
+                {
+                    MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
+                    StaffId = reader.GetInt32(reader.GetOrdinal("StaffId")),
+                    StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
+                    StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
+                    MeetingTitle = reader.GetString(reader.GetOrdinal("MeetingTitle")),
+                    EndConfirmToken = reader.GetString(reader.GetOrdinal("EndConfirmToken")),
+                });
+            }
+
+            return list;
+        }
+
+        // ── Save End Confirm Token ────────────────────────────────────────────
+        public async Task SaveEndConfirmTokenAsync(int meetingId, int staffId, string token)
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_SaveEndConfirmToken", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+            command.Parameters.AddWithValue("@StaffId", staffId);
+            command.Parameters.AddWithValue("@Token", token);
+
+            await connection.OpenAsync();
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+        private IEnumerable<Claim> ValidateInviteToken(string token)
+        {
+            var secret = _configuration["AppSettings:JwtInviteSecret"]!;
+            var handler = new JwtSecurityTokenHandler();
+            var result = handler.ValidateToken(token, new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero
+            }, out _);
+            return result.Claims;
+        }
+
+        private IEnumerable<Claim> ValidateEndConfirmToken(string token)
+        {
+            var claims = ValidateInviteToken(token);
+            if (claims.FirstOrDefault(c => c.Type == "type")?.Value != "endconfirm")
+                throw new SecurityTokenException("Invalid token type.");
+            return claims;
+        }
+
+        private static AttendanceResponse MapFromReader(SqlDataReader reader)
+        {
+            return new AttendanceResponse
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
+                StaffId = reader.GetInt32(reader.GetOrdinal("StaffId")),
+                StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
+                StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
+                DepartmentId = reader.GetInt32(reader.GetOrdinal("DepartmentId")),
+                DepartmentName = reader.GetString(reader.GetOrdinal("DepartmentName")),
+                Mode = reader.GetString(reader.GetOrdinal("Mode")),
+                Status = reader.GetString(reader.GetOrdinal("Status")),
+                CheckInAt = reader.IsDBNull(reader.GetOrdinal("CheckInAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CheckInAt")),
+                CheckInWithinFence = reader.IsDBNull(reader.GetOrdinal("CheckInWithinFence")) ? null : reader.GetBoolean(reader.GetOrdinal("CheckInWithinFence")),
+                JoinedAt = reader.IsDBNull(reader.GetOrdinal("JoinedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("JoinedAt")),
+                ConfirmedAt = reader.IsDBNull(reader.GetOrdinal("ConfirmedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConfirmedAt")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            };
         }
     }
 }

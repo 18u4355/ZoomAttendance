@@ -1,6 +1,5 @@
 ﻿using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
-using ZoomAttendance.Models.ResponseModels.ZoomAttendance.Models.ResponseModels;
 
 namespace ZoomAttendance.Repositories.Interfaces
 {

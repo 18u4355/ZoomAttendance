@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using ZoomAttendance.BackgroundJobs;
 using ZoomAttendance.Data;
+using ZoomAttendance.Helpers;
 using ZoomAttendance.Repositories.Implementations;
 using ZoomAttendance.Repositories.Interfaces;
 using ZoomAttendance.Services;
@@ -13,7 +15,6 @@ internal class Program
     private static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
-
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
         );
@@ -24,17 +25,23 @@ internal class Program
                       .AllowAnyMethod()
                       .AllowAnyHeader());
         });
-
-        // ── Repositories & Services ───────────────────────────────────────────
         builder.Services.AddScoped<IAuthRepository, AuthRepository>();
         builder.Services.AddScoped<IMeetingRepository, MeetingRepository>();
         builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         builder.Services.AddScoped<ISettingsRepository, SettingsRepository>();
         builder.Services.AddScoped<IStaffRepository, StaffRepository>();
+        builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         builder.Services.AddScoped<IEmailService, EmailService>();
-        builder.Services.AddControllers();
-        builder.Services.AddEndpointsApiExplorer();
+        builder.Services.AddScoped<IMeetingInviteRepository, MeetingInviteRepository>();
+        builder.Services.AddHostedService<AttendanceBackgroundJob>();
+        builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 
+        builder.Services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.Converters.Add(new DateTimeConverter());
+            });
+        builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(c =>
         {
             c.SwaggerDoc("v1", new OpenApiInfo
@@ -66,7 +73,6 @@ internal class Program
                 }
             });
         });
-
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
@@ -83,26 +89,18 @@ internal class Program
                     )
                 };
             });
-
         builder.Services.AddAuthorization();
-
         var app = builder.Build();
-
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();
             app.UseSwaggerUI();
         }
-
         app.UseHttpsRedirection();
-
         app.UseCors("AllowAll");
-
         app.UseAuthentication();
         app.UseAuthorization();
-
         app.MapControllers();
-
         app.Run();
     }
 }

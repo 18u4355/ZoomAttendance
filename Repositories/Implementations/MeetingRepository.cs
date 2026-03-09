@@ -1,427 +1,322 @@
-﻿using Microsoft.EntityFrameworkCore;
-using System.Text;
-using ZoomAttendance.Data;
-using ZoomAttendance.Entities;
-using ZoomAttendance.Models;
-using ZoomAttendance.Models.Entities;
+﻿// Repositories/Implementations/MeetingRepository.cs
+
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using System.Data;
+using ZoomAttendance.Helpers;
 using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
-using ZoomAttendance.Services;
-using static System.Net.WebRequestMethods;
 
 namespace ZoomAttendance.Repositories.Implementations
 {
     public class MeetingRepository : IMeetingRepository
     {
-        private readonly ApplicationDbContext _db;
-        private readonly IEmailService _emailService;
-        private readonly IAttendanceRepository _attendanceRepository;
+        private readonly string _connectionString;
 
-
-        public MeetingRepository(ApplicationDbContext db, IEmailService emailService, IAttendanceRepository attendanceRepository)
+        public MeetingRepository(IConfiguration configuration)
         {
-            _db = db;
-            _emailService = emailService;
-            _attendanceRepository = attendanceRepository;
+            _connectionString = configuration.GetConnectionString("DefaultConnection")!;
         }
 
-        // ── ONLINE FLOW ───────────────────────────────────────────────────────
-
-        public async Task<ApiResponse<bool>> CreateMeetingAsync(CreateMeetingRequest request, int hrId)
+        public async Task<PagedMeetingResponse> GetAllAsync(MeetingFilterRequest filter)
         {
-            try
+            var meetings = new List<MeetingResponse>();
+            int totalCount = 0;
+
+            var limit = filter.Limit is < 1 or > 100 ? 20 : filter.Limit;
+            var page = filter.Page < 1 ? 1 : filter.Page;
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetAllMeetings", connection)
             {
-                if (string.IsNullOrWhiteSpace(request.Title))
-                    return ApiResponse<bool>.Fail("Meeting title is required");
-
-                if (string.IsNullOrWhiteSpace(request.ZoomUrl))
-                    return ApiResponse<bool>.Fail("Zoom URL is required");
-
-                if (!Uri.TryCreate(request.ZoomUrl, UriKind.Absolute, out var uri))
-                    return ApiResponse<bool>.Fail("Invalid Zoom URL format");
-
-                if (!uri.Host.Contains("zoom.us"))
-                    return ApiResponse<bool>.Fail("URL must be a valid Zoom meeting link");
-
-                if (!request.ZoomUrl.Contains("/j/"))
-                    return ApiResponse<bool>.Fail("Invalid Zoom meeting link format");
-
-                var meeting = new Meeting
-                {
-                    Title = request.Title,
-                    ZoomUrl = request.ZoomUrl,
-                    StartTime = request.StartTime,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = hrId
-                };
-
-                _db.Meetings.Add(meeting);
-                await _db.SaveChangesAsync();
-
-                return ApiResponse<bool>.Success(true, "Meeting created successfully");
-            }
-            catch (Exception ex)
-            {
-                return ApiResponse<bool>.Fail("Failed to create meeting", ex.ToString());
-            }
-        }
-
-        public async Task<ApiResponse<PaginatedResponse<MeetingResponse>>> GetAllMeetingsAsync(
-            int page = 1,
-            int pageSize = 10,
-            string status = null,
-            string search = null)
-        {
-            var query = _db.Meetings.AsQueryable();
-
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                if (status.ToLower() == "active")
-                    query = query.Where(m => m.IsActive);
-                else if (status.ToLower() == "closed")
-                    query = query.Where(m => !m.IsActive);
-            }
-
-            if (!string.IsNullOrWhiteSpace(search))
-                query = query.Where(m => m.Title.Contains(search));
-
-            var totalCount = await query.CountAsync();
-
-            var meetings = await query
-                .OrderByDescending(s => s.CreatedAt)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(m => new MeetingResponse
-                {
-                    MeetingId = m.MeetingId,
-                    Title = m.Title,
-                    IsActive = m.IsActive,
-                    ZoomUrl = m.ZoomUrl,
-                    CreatedAt = m.CreatedAt,
-                    TotalInvited = _db.Attendance.Count(a => a.MeetingId == m.MeetingId),
-                    TotalJoined = _db.Attendance.Count(a => a.MeetingId == m.MeetingId && a.JoinTime != null),
-                    TotalConfirmed = _db.Attendance.Count(a => a.MeetingId == m.MeetingId && a.ConfirmAttendance),
-                })
-                .ToListAsync();
-
-            var response = new PaginatedResponse<MeetingResponse>
-            {
-                Items = meetings,
-                Page = page,
-                PageSize = pageSize,
-                TotalCount = totalCount,
-                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                CommandType = CommandType.StoredProcedure
             };
 
-            return ApiResponse<PaginatedResponse<MeetingResponse>>.Success(response);
-        }
+            command.Parameters.AddWithValue("@Search", (object?)filter.Search ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Mode", (object?)filter.Mode ?? DBNull.Value);
+            command.Parameters.AddWithValue("@AudienceType", (object?)filter.AudienceType ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DateFrom", (object?)filter.DateFrom ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DateTo", (object?)filter.DateTo ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DepartmentId", (object?)filter.DepartmentId ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Page", page);
+            command.Parameters.AddWithValue("@Limit", limit);
 
-        public async Task<ApiResponse<MeetingDetailResponse>> GetMeetingByIdAsync(int meetingId)
-        {
-            var meeting = await _db.Meetings
-                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
 
-            if (meeting == null)
-                return ApiResponse<MeetingDetailResponse>.Fail("Meeting not found");
-
-            var totalInvited = await _db.Attendance.CountAsync(a => a.MeetingId == meetingId);
-            var totalJoined = await _db.Attendance.CountAsync(a => a.MeetingId == meetingId && a.JoinTime != null);
-            var totalConfirmed = await _db.Attendance.CountAsync(a => a.MeetingId == meetingId && a.ConfirmAttendance);
-
-            return ApiResponse<MeetingDetailResponse>.Success(new MeetingDetailResponse
+            while (await reader.ReadAsync())
             {
-                MeetingId = meeting.MeetingId,
-                Title = meeting.Title,
-                IsActive = meeting.IsActive,
-                ZoomUrl = meeting.ZoomUrl,
-                TotalInvited = totalInvited,
-                TotalJoined = totalJoined,
-                TotalConfirmed = totalConfirmed
-            });
-        }
+                if (totalCount == 0)
+                    totalCount = reader.GetInt32(reader.GetOrdinal("TotalCount"));
 
-        public async Task<ApiResponse<List<MeetingAttendanceResponse>>> GetMeetingAttendanceAsync(int meetingId)
-        {
-            var meetingExists = await _db.Meetings.AnyAsync(m => m.MeetingId == meetingId);
+                meetings.Add(MapToResponse(reader));
+            }
 
-            if (!meetingExists)
-                return ApiResponse<List<MeetingAttendanceResponse>>.Fail("Meeting not found");
-
-            var attendanceList = await _db.Attendance
-                .Where(a => a.MeetingId == meetingId)
-                .Select(a => new MeetingAttendanceResponse
-                {
-                    AttendanceId = a.AttendanceId,
-                    StaffName = a.StaffName,
-                    StaffEmail = a.StaffEmail,
-                    JoinTime = a.JoinTime,
-                    ConfirmAttendance = a.ConfirmAttendance,
-                    ConfirmationTime = a.ConfirmationTime,
-                })
-                .ToListAsync();
-
-            return ApiResponse<List<MeetingAttendanceResponse>>.Success(attendanceList);
-        }
-
-        public async Task<ApiResponse<DashboardSummaryResponse>> GetDashboardSummaryAsync()
-        {
-            var totalMeetings = await _db.Meetings.CountAsync();
-            var activeMeetings = await _db.Meetings.CountAsync(m => m.IsActive);
-            var closedMeetings = await _db.Meetings.CountAsync(m => !m.IsActive);
-            var totalInvited = await _db.Attendance.CountAsync();
-            var totalConfirmed = await _db.Attendance.CountAsync(a => a.ConfirmAttendance);
-
-            return ApiResponse<DashboardSummaryResponse>.Success(new DashboardSummaryResponse
+            return new PagedMeetingResponse
             {
-                TotalMeetings = totalMeetings,
-                ActiveMeetings = activeMeetings,
-                ClosedMeetings = closedMeetings,
-                TotalInvited = totalInvited,
-                TotalConfirmed = totalConfirmed
-            });
+                Data = meetings,
+                Page = page,
+                Limit = limit,
+                Total = totalCount
+            };
         }
 
-        public async Task<byte[]?> ExportAttendanceAsync(int meetingId)
+        public async Task<MeetingResponse?> GetByIdAsync(int id)
         {
-            if (meetingId <= 0) return null;
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetMeetingById", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-            var meeting = await _db.Meetings.AsNoTracking()
-                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
+            command.Parameters.AddWithValue("@Id", id);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            MeetingResponse? meeting = null;
+
+            // First result set — meeting details
+            if (await reader.ReadAsync())
+                meeting = MapToResponse(reader);
 
             if (meeting == null) return null;
 
-            var attendanceList = await _db.Attendance
-                .AsNoTracking()
-                .Where(a => a.MeetingId == meetingId)
-                .Join(_db.Users,
-                    attendance => attendance.StaffEmail,
-                    user => user.Email,
-                    (attendance, user) => new
-                    {
-                        user.StaffName,
-                        attendance.StaffEmail,
-                        attendance.JoinTime,
-                        attendance.ConfirmAttendance,
-                        attendance.ConfirmationTime
-                    })
-                .ToListAsync();
-
-            if (!attendanceList.Any()) return null;
-
-            var csv = new StringBuilder();
-            csv.AppendLine("Staff Name,Staff Email,Join Time,Confirmed,Confirmed Time");
-
-            foreach (var a in attendanceList)
+            // Second result set — departments
+            if (await reader.NextResultAsync())
             {
-                csv.AppendLine(
-                    $"{a.StaffName}," +
-                    $"{a.StaffEmail}," +
-                    $"{a.JoinTime?.ToString("yyyy-MM-dd HH:mm:ss")}," +
-                    $"{a.ConfirmAttendance}," +
-                    $"{a.ConfirmationTime?.ToString("yyyy-MM-dd HH:mm:ss")}"
-                );
+                while (await reader.ReadAsync())
+                {
+                    meeting.Departments.Add(new MeetingDepartmentResponse
+                    {
+                        Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                        Name = reader.GetString(reader.GetOrdinal("Name"))
+                    });
+                }
             }
 
-            return Encoding.UTF8.GetBytes(csv.ToString());
+            return meeting;
         }
 
-        public async Task<ApiResponse<int>> SendMeetingInvitesAsync(
-    int meetingId,
-    SendMeetingInviteRequest request)
+        public async Task<MeetingResponse> CreateAsync(CreateMeetingRequest request)
         {
-            try
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_CreateMeeting", connection)
             {
-                if (request.VirtualStaffEmails == null ||
-                    !request.VirtualStaffEmails.Any())
+                CommandType = CommandType.StoredProcedure
+            };
+
+            var departmentIds = request.DepartmentIds != null && request.DepartmentIds.Any()
+                ? string.Join(",", request.DepartmentIds)
+                : null;
+
+            command.Parameters.AddWithValue("@Title", request.Title.Trim());
+            command.Parameters.AddWithValue("@Mode", request.Mode.ToLower().Trim());
+            command.Parameters.AddWithValue("@AudienceType", request.AudienceType.ToLower().Trim());
+            command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
+            command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
+            command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
+            command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomUrl ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DepartmentIds", (object?)departmentIds ?? DBNull.Value);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                if (reader.GetName(0) == "ErrorCode")
+                    throw new InvalidOperationException(reader["ErrorMessage"].ToString());
+
+                var meeting = MapToResponse(reader);
+
+                // Second result set — departments
+                if (await reader.NextResultAsync())
                 {
-                    return ApiResponse<int>.Fail(
-                        "At least one staff email must be provided.");
-                }
-
-                // Validate meeting
-                var meeting = await _db.Meetings
-                    .FirstOrDefaultAsync(m =>
-                        m.MeetingId == meetingId && m.IsActive);
-
-                if (meeting == null)
-                    return ApiResponse<int>.Fail(
-                        "Meeting not found or inactive");
-
-                // Fetch valid staff emails from DB
-                var validStaffEmails = await _db.Users
-                    .Where(u => u.Role.ToLower() == "staff")
-                    .Select(u => u.Email)
-                    .ToListAsync();
-
-                // Ensure all supplied emails exist
-                if (!request.VirtualStaffEmails
-                    .All(e => validStaffEmails.Contains(e)))
-                {
-                    return ApiResponse<int>.Fail(
-                        "One or more supplied emails are not valid staff.");
-                }
-
-                int sent = 0;
-
-                foreach (var email in request.VirtualStaffEmails)
-                {
-                    try
+                    while (await reader.ReadAsync())
                     {
-                        var result = await _attendanceRepository
-                            .GenerateJoinTokenAsync(
-                                meetingId,
-                                email,
-                                AttendanceChannel.Virtual);
-
-                        if (!result.IsSuccessful)
+                        meeting.Departments.Add(new MeetingDepartmentResponse
                         {
-                            Console.WriteLine(result.Message);
-                            continue;
-                        }
-
-                        var token = result.Data;
-
-                        var joinLink =
-                           //$"https://localhost:7067/api/attendance/join?token={token}";//
-                            $"http://207.180.246.69:7200/api/attendance/join?token={token}";
-
-                        await SendZoomEmail(
-                            email,
-                            meeting.Title,
-                            joinLink);
-
-                        sent++;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error sending to {email}");
-                        Console.WriteLine(ex.Message);
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            Name = reader.GetString(reader.GetOrdinal("Name"))
+                        });
                     }
                 }
 
-                return ApiResponse<int>.Success(
-                    sent,
-                    $"Virtual invites sent successfully. Total: {sent}");
+                return meeting;
             }
-            catch (Exception ex)
+
+            throw new InvalidOperationException("Failed to create meeting.");
+        }
+
+        public async Task<MeetingResponse> UpdateAsync(int id, UpdateMeetingRequest request)
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_UpdateMeeting", connection)
             {
-                return ApiResponse<int>.Fail(
-                    $"Error sending invites: {ex.Message}");
-            }
-        }
+                CommandType = CommandType.StoredProcedure
+            };
 
+            var departmentIds = request.DepartmentIds != null && request.DepartmentIds.Any()
+                ? string.Join(",", request.DepartmentIds)
+                : null;
 
-        private async Task SendZoomEmail(
-string email,
-string meetingTitle,
-string joinLink)
-        {
-            var body = $@"
-    <html>
-    <body style='font-family: Arial; background:#f4f6f9; padding:30px;'>
-        <div style='max-width:600px; margin:auto; background:white; padding:30px; border-radius:8px;'>
+            command.Parameters.AddWithValue("@Id", id);
+            command.Parameters.AddWithValue("@Title", request.Title.Trim());
+            command.Parameters.AddWithValue("@Mode", request.Mode.ToLower().Trim());
+            command.Parameters.AddWithValue("@AudienceType", request.AudienceType.ToLower().Trim());
+            command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
+            command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
+            command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
+            command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomUrl ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Status", request.Status.ToLower().Trim());
+            command.Parameters.AddWithValue("@DepartmentIds", (object?)departmentIds ?? DBNull.Value);
 
-            <h2 style='color:#2d8cff;'>Virtual Meeting Invitation</h2>
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
 
-            <p>You are invited to:</p>
-
-            <h3>{meetingTitle}</h3>
-
-            <p>
-                Click the button below to join the meeting:
-            </p>
-
-            <div style='text-align:center; margin:25px 0;'>
-                <a href='{joinLink}'
-                   style='background:#2d8cff;color:white;padding:12px 20px;
-                          text-decoration:none;border-radius:5px;'>
-                    Join Meeting
-                </a>
-            </div>
-
-        </div>
-    </body>
-    </html>";
-
-            await _emailService.SendEmailAsync(
-                email,
-                $"Meeting Invitation — {meetingTitle}",
-                body
-            );
-        }
-
-        // ── PHYSICAL FLOW ─────────────────────────────────────────────────────
-
-        public async Task<ApiResponse<List<StaffEmailResponse>>> GetAllStaffEmailsAsync()
-        {
-            var staff = await _db.Staff
-                .OrderBy(s => s.StaffName)
-                .Select(s => new StaffEmailResponse
+            if (await reader.ReadAsync())
+            {
+                if (reader.GetName(0) == "ErrorCode")
                 {
-                    Id = s.Id,
-                    StaffName = s.StaffName,
-                    Email = s.Email,
-                    Department = s.Department
-                })
-                .ToListAsync();
+                    var errorCode = reader["ErrorCode"].ToString();
+                    var errorMessage = reader["ErrorMessage"].ToString();
 
-            return ApiResponse<List<StaffEmailResponse>>.Success(staff);
-        }
+                    if (errorCode == "NOT_FOUND")
+                        throw new KeyNotFoundException(errorMessage);
 
-        public async Task<ApiResponse<MeetingPhysicalSummaryResponse>> GetMeetingPhysicalSummaryAsync(int meetingId)
-        {
-            var meeting = await _db.Meetings
-                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
+                    throw new InvalidOperationException(errorMessage);
+                }
 
-            if (meeting == null)
-                return ApiResponse<MeetingPhysicalSummaryResponse>.Fail("Meeting not found");
+                var meeting = MapToResponse(reader);
 
-            var totalPhysical = await _db.AttendanceLogs
-                .CountAsync(a => a.MeetingId == meetingId);
+                // Second result set — departments
+                if (await reader.NextResultAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        meeting.Departments.Add(new MeetingDepartmentResponse
+                        {
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            Name = reader.GetString(reader.GetOrdinal("Name"))
+                        });
+                    }
+                }
 
-            return ApiResponse<MeetingPhysicalSummaryResponse>.Success(new MeetingPhysicalSummaryResponse
-            {
-                MeetingId = meeting.MeetingId,
-                MeetingTitle = meeting.Title,
-                MeetingDate = meeting.CreatedAt,
-                TotalPhysicalAttendees = totalPhysical
-            });
-        }
-
-        public async Task<byte[]?> ExportPhysicalAttendanceAsync(int meetingId)
-        {
-            if (meetingId <= 0) return null;
-
-            var meeting = await _db.Meetings.AsNoTracking()
-                .FirstOrDefaultAsync(m => m.MeetingId == meetingId);
-
-            if (meeting == null) return null;
-
-            var logs = await _db.AttendanceLogs
-                .AsNoTracking()
-                .Include(a => a.Staff)
-                .Where(a => a.MeetingId == meetingId)
-                .OrderBy(a => a.ScannedAt)
-                .ToListAsync();
-
-            if (!logs.Any()) return null;
-
-            var csv = new StringBuilder();
-            csv.AppendLine("Staff Name,Department,Email,Scanned At");
-
-            foreach (var log in logs)
-            {
-                csv.AppendLine(
-                    $"{log.Staff.StaffName}," +
-                    $"{log.Staff.Department}," +
-                    $"{log.Staff.Email}," +
-                    $"{log.ScannedAt:yyyy-MM-dd HH:mm:ss}"
-                );
+                return meeting;
             }
 
-            return Encoding.UTF8.GetBytes(csv.ToString());
+            throw new InvalidOperationException("Failed to update meeting.");
         }
+
+        public async Task DeleteAsync(int id)
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_DeleteMeeting", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@Id", id);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                var errorCode = reader["ErrorCode"]?.ToString();
+                var errorMessage = reader["ErrorMessage"]?.ToString();
+
+                if (!string.IsNullOrEmpty(errorCode))
+                {
+                    if (errorCode == "NOT_FOUND")
+                        throw new KeyNotFoundException(errorMessage);
+
+                    throw new InvalidOperationException(errorMessage);
+                }
+            }
+        }
+        // Add this method to MeetingRepository.cs
+        // inside the class body
+        // Also add at top: using ZoomAttendance.Helpers;
+
+        public async Task<byte[]> ExportAsync(MeetingFilterRequest filter)
+        {
+            var records = new List<MeetingResponse>();
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_ExportMeetings", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@Search", (object?)filter.Search ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Mode", (object?)filter.Mode ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
+            command.Parameters.AddWithValue("@AudienceType", (object?)filter.AudienceType ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DateFrom", (object?)filter.DateFrom ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DateTo", (object?)filter.DateTo ?? DBNull.Value);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                records.Add(new MeetingResponse
+                {
+                    Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                    Title = reader.GetString(reader.GetOrdinal("Title")),
+                    Mode = reader.GetString(reader.GetOrdinal("Mode")),
+                    AudienceType = reader.GetString(reader.GetOrdinal("AudienceType")),
+                    StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
+                    DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
+                    Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
+                    ZoomUrl = reader.IsDBNull(reader.GetOrdinal("ZoomUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomUrl")),
+                    Status = reader.GetString(reader.GetOrdinal("Status")),
+                    CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                    UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+                });
+            }
+
+            var headers = new[]
+            {
+                "Id", "Title", "Mode", "Audience", "Start Date", "Duration (mins)",
+                "Location", "Zoom URL", "Status", "Created At", "Updated At"
+            };
+
+            var rows = records.Select(m => new List<object?>
+            {
+                m.Id,
+                m.Title,
+                m.Mode,
+                m.AudienceType,
+                m.StartDatetime.ToString("yyyy-MM-dd HH:mm:ss"),
+                m.DurationMinutes,
+                m.Location  ?? "-",
+                m.ZoomUrl   ?? "-",
+                m.Status,
+                m.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                m.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
+            });
+
+            return ExcelExportHelper.GenerateExcel("Meetings", headers, rows);
+        }
+
+        // ── Mapper ───────────────────────────────────────────────────
+        private static MeetingResponse MapToResponse(SqlDataReader reader) => new()
+        {
+            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+            Title = reader.GetString(reader.GetOrdinal("Title")),
+            Mode = reader.GetString(reader.GetOrdinal("Mode")),
+            AudienceType = reader.GetString(reader.GetOrdinal("AudienceType")),
+            StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
+            DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
+            Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
+            ZoomUrl = reader.IsDBNull(reader.GetOrdinal("ZoomUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomUrl")),
+            Status = reader.GetString(reader.GetOrdinal("Status")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+        };
     }
 }

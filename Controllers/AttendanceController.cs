@@ -1,97 +1,125 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿// Controllers/AttendanceController.cs
+
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using QRCoder;
-using ZoomAttendance.Data;
-using ZoomAttendance.Models;
 using ZoomAttendance.Models.RequestModels;
-using ZoomAttendance.Repositories.Implementations;
+using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
-using Microsoft.EntityFrameworkCore;
 
 namespace ZoomAttendance.Controllers
 {
     [ApiController]
-    [Route("api/attendance")]
+    [Route("api/v1/attendance")]
+    [Produces("application/json")]
+    [Authorize]
     public class AttendanceController : ControllerBase
     {
-        private readonly IAttendanceRepository _attendanceRepo;
-        private readonly ApplicationDbContext _context;
-        public AttendanceController(IAttendanceRepository attendanceRepo, ApplicationDbContext context)
+        private readonly IAttendanceRepository _repo;
+
+        public AttendanceController(IAttendanceRepository repo)
         {
-            _attendanceRepo = attendanceRepo;
-            _context = context;
+            _repo = repo;
         }
 
-
-        [HttpPost("generate-link")]
-        [Authorize(Roles = "HR")]
-        public async Task<IActionResult> GenerateJoinLink(int meetingId, string email)
+        // GET api/v1/attendance/{meetingId}
+        [HttpGet("{meetingId:int}")]
+        public async Task<IActionResult> GetByMeeting(int meetingId, [FromQuery] AttendanceFilterRequest filter)
         {
-            var result = await _attendanceRepo
-                .GenerateAndSendLinkAsync(meetingId, email);
-
-            if (!result.IsSuccessful)
-                return BadRequest(result);
-
-            return Ok(result);
+            try
+            {
+                var data = await _repo.GetAttendanceAsync(meetingId, filter);
+                return Ok(ApiResponse<PagedAttendanceResponse>.Success(data));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
 
-        [HttpGet("join")]
-        public async Task<IActionResult> JoinMeeting([FromQuery] string token)
+        // GET api/v1/attendance/{meetingId}/summary
+        [HttpGet("{meetingId:int}/summary")]
+        public async Task<IActionResult> GetSummary(int meetingId)
         {
-            var result = await _attendanceRepo.ValidateAndConfirmAsync(token);
-            if (!result.IsSuccessful) return BadRequest(result.Message);
-            return Redirect(result.Data);
+            try
+            {
+                var data = await _repo.GetSummaryAsync(meetingId);
+                return Ok(ApiResponse<AttendanceSummaryResponse>.Success(data));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
 
-        [Authorize(Roles = "HR")]
-        [HttpPost("close/{meetingId}")]
-        public async Task<IActionResult> CloseMeeting([FromRoute] int meetingId)
+        // GET api/v1/attendance/{meetingId}/export
+        [HttpGet("{meetingId:int}/export")]
+        public async Task<IActionResult> Export(int meetingId, [FromQuery] AttendanceFilterRequest filter)
         {
-            var result = await _attendanceRepo.CloseMeetingAsync(meetingId);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
-
+            try
+            {
+                var fileBytes = await _repo.ExportAsync(meetingId, filter);
+                var fileName = $"Attendance_{meetingId}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+                return File(fileBytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
 
-        [HttpGet("confirm")]
-        public async Task<IActionResult> Confirm([FromQuery] string token)
+        // POST api/v1/attendance/confirm-end
+        [AllowAnonymous]
+        [HttpPost("confirm-end")]
+        public async Task<IActionResult> VirtualEndConfirm([FromBody] VirtualEndConfirmRequest request)
         {
-            var confirmResult = await _attendanceRepo.ConfirmCloseMeetingAsync(token);
-            return Redirect(confirmResult.RedirectUrl);
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ApiResponse<string>.Fail("Validation failed."));
+
+                var result = await _repo.VirtualEndConfirmAsync(request.Token);
+                return Ok(ApiResponse<CheckInResponse>.Success(result, result.Message));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
 
-        [HttpPost("send-qrcodes")]
-        [Authorize(Roles = "HR")]
-        public async Task<IActionResult> SendQrCodes([FromBody] SendQrCodeRequest request)
+        // PATCH api/v1/attendance/status
+        [HttpPatch("status")]
+        public async Task<IActionResult> UpdateStatus([FromBody] ManualStatusUpdateRequest request)
         {
-            var result = await _attendanceRepo.SendQrCodesAsync(request);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ApiResponse<string>.Fail("Validation failed."));
+
+                await _repo.UpdateStatusAsync(request.MeetingId, request.StaffId, request.Status);
+                return Ok(ApiResponse<string>.Success(null, "Attendance status updated successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
-
-        [HttpPost("scan")]
-        [Authorize(Roles = "HR")]
-        public async Task<IActionResult> Scan([FromBody] ScanAttendanceRequest request)
-        {
-            var result = await _attendanceRepo.ScanAsync(request);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
-        }
-
-        [HttpGet("physical/{meetingId}")]
-        [Authorize(Roles = "HR")]
-        public async Task<IActionResult> GetPhysicalAttendance(int meetingId)
-        {
-            var result = await _attendanceRepo.GetMeetingAttendanceAsync(meetingId);
-            return StatusCode(result.IsSuccessful ? 200 : 404, result);
-        }
-
-        [HttpGet("staff-emails")]
-        [Authorize(Roles = "HR")]
-        public async Task<IActionResult> GetAllStaffEmails()
-        {
-            var result = await _attendanceRepo.GetAllStaffEmailsAsync();
-            return StatusCode(result.IsSuccessful ? 200 : 404, result);
-        }
-
-
     }
 }

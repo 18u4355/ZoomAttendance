@@ -1,31 +1,21 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+﻿// Entities/MeetingInvite.cs
 
-namespace ZoomAttendance.Models.Entities
+namespace ZoomAttendance.Entities
 {
-    [Table("meetinginvites")]
-    public class MeetingInvites
+    public class MeetingInvite
     {
-        [Key]
-
-        [Column("meeting_id")]
+        public int Id { get; set; }
         public int MeetingId { get; set; }
-
-        [Required]
-        [Column("email")]
-        [MaxLength(150)]
-        public string Email { get; set; }
-
-        [Column("sent_date")]
-        public DateTime? SentDate { get; set; }
-
-        [Column("email_status")]
-        [MaxLength(20)]
-        public string? EmailStatus { get; set; }
-
-        // Navigation property
-        [ForeignKey("MeetingId")]
-        public Meeting Meeting { get; set; }
+        public int StaffId { get; set; }
+        public string Token { get; set; } = string.Empty;
+        public DateTime? SentAt { get; set; }
+        public DateTime? ResentAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? ConfirmedAt { get; set; }
+        public DateTime? JoinedAt { get; set; }
+        public decimal? StaffLatitude { get; set; }
+        public decimal? StaffLongitude { get; set; }
+        public bool? IsWithinFence { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 }

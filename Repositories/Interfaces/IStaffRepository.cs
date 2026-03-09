@@ -1,23 +1,20 @@
-﻿using ZoomAttendance.Models;
+﻿// Repositories/Interfaces/IStaffRepository.cs
+
 using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
-using ZoomAttendance.Models.ResponseModels.ZoomAttendance.Models.ResponseModels;
 
 namespace ZoomAttendance.Repositories.Interfaces
 {
     public interface IStaffRepository
     {
-        // ── Physical staff (QR attendance) ────────────────────────────────────
-        Task<ApiResponse<StaffResponseQr>> RegisterAsync(RegisterStaffRequest request);
-        Task<ApiResponse<PaginatedResponse<StaffResponseQr>>> GetAllAsync(PaginatedStaffRequest request);
-        Task<ApiResponse<StaffResponseQr>> GetByIdAsync(int id);
-        Task<ApiResponse<bool>> DeleteAsync(int id);
-        Task<ApiResponse<StaffAttendanceHistoryResponse>> GetPhysicalAttendanceHistoryAsync(string email);
-
-        // ── Virtual staff (Zoom attendance) ───────────────────────────────────
-        Task<ApiResponse<bool>> CreateStaffAsync(CreateStaffRequest request);
-        Task<ApiResponse<PaginatedResponse<staffResponse>>> GetAllStaffAsync(PaginatedStaffRequest request);
-        Task<ApiResponse<bool>> DeleteVirtualStaffAsync(int id);
-        Task<ApiResponse<StaffAttendanceHistoryResponse>> GetVirtualAttendanceHistoryAsync(string email);
+        Task<PagedStaffResponse> GetAllAsync(StaffFilterRequest filter);
+        Task<StaffResponse?> GetByIdAsync(int id);
+        Task<StaffResponse> CreateAsync(CreateStaffRequest request);
+        Task<StaffResponse> UpdateAsync(int id, UpdateStaffRequest request);
+        Task UpdateStatusAsync(int id, UpdateStaffStatusRequest request);
+        Task DeleteAsync(int id);
+        Task<byte[]> ExportAsync(StaffFilterRequest filter);
+        Task<BulkUploadResponse> BulkUploadAsync(IFormFile file);
+        Task<byte[]> GetUploadTemplateAsync();
     }
 }

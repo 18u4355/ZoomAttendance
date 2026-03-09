@@ -1,14 +1,11 @@
-﻿// Entities/Staff.cs
+﻿// Entities/Department.cs
 
 namespace ZoomAttendance.Entities
 {
-    public class Staff
+    public class Department
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-        public int DepartmentId { get; set; }
-        public string Status { get; set; } = "active";
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

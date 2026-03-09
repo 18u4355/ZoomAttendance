@@ -8,7 +8,6 @@ using ZoomAttendance.Data;
 using ZoomAttendance.Models.Entities;
 using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
-using ZoomAttendance.Models.ResponseModels.ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Repositories.Implementations

@@ -1,84 +1,197 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿// Controllers/StaffController.cs
+
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ZoomAttendance.Models.RequestModels;
+using ZoomAttendance.Models.ResponseModels;
 using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
-    [Authorize(Roles = "HR")]
+    [Route("api/v1/staff")]
+    [Produces("application/json")]
+    [Authorize]
     public class StaffController : ControllerBase
     {
-        private readonly IStaffRepository _staffRepository;
+        private readonly IStaffRepository _repo;
 
-        public StaffController(IStaffRepository staffRepository)
+        public StaffController(IStaffRepository repo)
         {
-            _staffRepository = staffRepository;
+            _repo = repo;
         }
 
-        // ── Physical staff (QR attendance) ────────────────────────────────────
-
-        [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterStaffRequest request)
+        [HttpGet]
+        public async Task<IActionResult> GetAll([FromQuery] StaffFilterRequest filter)
         {
-            var result = await _staffRepository.RegisterAsync(request);
-            return StatusCode(result.IsSuccessful ? 201 : 400, result);
+            try
+            {
+                var data = await _repo.GetAllAsync(filter);
+                return Ok(ApiResponse<PagedStaffResponse>.Success(data));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
 
-        [HttpGet("physical")]
-        public async Task<IActionResult> GetAll([FromQuery] PaginatedStaffRequest request)
-        {
-            var result = await _staffRepository.GetAllAsync(request);
-            return Ok(result);
-        }
-
-        [HttpGet("physical/{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var result = await _staffRepository.GetByIdAsync(id);
-            return StatusCode(result.IsSuccessful ? 200 : 404, result);
+            try
+            {
+                var data = await _repo.GetByIdAsync(id);
+                if (data == null)
+                    return NotFound(ApiResponse<string>.Fail($"Staff with id '{id}' was not found."));
+
+                return Ok(ApiResponse<StaffResponse>.Success(data));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
 
-        [HttpDelete("Physical/{id}")]
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] CreateStaffRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ApiResponse<string>.Fail("Validation failed.", ModelState.ToString()));
+
+                var created = await _repo.CreateAsync(request);
+                return CreatedAtAction(nameof(GetById), new { id = created.Id },
+                    ApiResponse<StaffResponse>.Success(created, "Staff member created successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
+        }
+
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateStaffRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ApiResponse<string>.Fail("Validation failed.", ModelState.ToString()));
+
+                var updated = await _repo.UpdateAsync(id, request);
+                return Ok(ApiResponse<StaffResponse>.Success(updated, "Staff member updated successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
+        }
+
+        [HttpPatch("{id:int}/status")]
+        public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateStaffStatusRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ApiResponse<string>.Fail("Validation failed.", ModelState.ToString()));
+
+                await _repo.UpdateStatusAsync(id, request);
+                return Ok(ApiResponse<string>.Success("Staff status updated successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
+        }
+
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
-            var result = await _staffRepository.DeleteAsync(id);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
+            try
+            {
+                await _repo.DeleteAsync(id);
+                return Ok(ApiResponse<string>.Success("Staff member deleted successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
-        [HttpGet("physical/history/{email}")]
-        public async Task<IActionResult> GetPhysicalHistory(string email)
+        // Add these two endpoints to Controllers/StaffController.cs
+        // Also add this using if not present:
+        //   using Microsoft.AspNetCore.Http;
+
+        // GET api/v1/staff/upload-template
+        [HttpGet("upload-template")]
+        public async Task<IActionResult> GetUploadTemplate()
         {
-            var result = await _staffRepository.GetPhysicalAttendanceHistoryAsync(email);
-            return StatusCode(result.IsSuccessful ? 200 : 404, result);
+            try
+            {
+                var fileBytes = await _repo.GetUploadTemplateAsync();
+                return File(
+                    fileBytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "StaffUploadTemplate.xlsx"
+                );
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("Failed to generate template.", ex.Message));
+            }
         }
 
-        // ── Virtual staff (Zoom attendance) ───────────────────────────────────
+        // POST api/v1/staff/bulk-upload
+        [HttpPost("bulk-upload")]
+        public async Task<IActionResult> BulkUpload(IFormFile file)
+        {
+            try
+            {
+                if (file == null || file.Length == 0)
+                    return BadRequest(ApiResponse<string>.Fail("No file uploaded."));
 
-        [HttpPost("virtual")]
-        public async Task<IActionResult> CreateStaff([FromBody] CreateStaffRequest request)
-        {
-            var result = await _staffRepository.CreateStaffAsync(request);
-            return Ok(result);
-        }
+                if (Path.GetExtension(file.FileName).ToLower() != ".xlsx")
+                    return BadRequest(ApiResponse<string>.Fail("Only .xlsx files are accepted."));
 
-        [HttpGet("virtual")]
-        public async Task<IActionResult> GetAllStaff([FromQuery] PaginatedStaffRequest request)
-        {
-            var result = await _staffRepository.GetAllStaffAsync(request);
-            return Ok(result);
-        }
-        [HttpDelete("virtual/{id}")]
-        public async Task<IActionResult> DeleteVirtualStaff(int id)
-        {
-            var result = await _staffRepository.DeleteVirtualStaffAsync(id);
-            return StatusCode(result.IsSuccessful ? 200 : 400, result);
-        }
-        [HttpGet("virtual/history/{email}")]
-        public async Task<IActionResult> GetVirtualHistory(string email)
-        {
-            var result = await _staffRepository.GetVirtualAttendanceHistoryAsync(email);
-            return StatusCode(result.IsSuccessful ? 200 : 404, result);
+                var result = await _repo.BulkUploadAsync(file);
+                var message = $"Upload complete. {result.Succeeded} succeeded, {result.Failed} failed.";
+                return Ok(ApiResponse<BulkUploadResponse>.Success(result, message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
         }
     }
 }

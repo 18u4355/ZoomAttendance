@@ -1,12 +1,13 @@
-﻿using ZoomAttendance.Entities;
-using ZoomAttendance.Models.Entities;
+﻿// Services/IEmailService.cs
 
 namespace ZoomAttendance.Services
+{
+    public interface IEmailService
     {
-        public interface IEmailService
-        {
-            Task SendEmailAsync(string toEmail, string subject, string body);
-            Task SendQrCodeEmailAsync(Staff staff, Meeting meeting);
+        Task SendEmailAsync(string toEmail, string subject, string body);
+        Task SendAttendanceLinkEmailAsync(
+            ZoomAttendance.Entities.Staff staff,
+            ZoomAttendance.Entities.Meeting meeting,
+            string token);
     }
-    }
-
+}
