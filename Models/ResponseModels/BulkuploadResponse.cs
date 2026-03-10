@@ -1,4 +1,5 @@
 ﻿// Models/ResponseModels/BulkUploadResponse.cs
+// StaffId changed to Guid?
 
 namespace ZoomAttendance.Models.ResponseModels
 {
@@ -17,6 +18,6 @@ namespace ZoomAttendance.Models.ResponseModels
         public string Email { get; set; } = string.Empty;
         public bool Success { get; set; }
         public string? Error { get; set; }
-        public int? StaffId { get; set; }
+        public Guid? StaffId { get; set; }
     }
 }

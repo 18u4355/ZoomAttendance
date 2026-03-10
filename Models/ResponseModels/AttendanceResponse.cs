@@ -1,5 +1,5 @@
 ﻿// Models/ResponseModels/AttendanceResponse.cs
-// Checkout fields removed
+// StaffId changed to Guid
 
 namespace ZoomAttendance.Models.ResponseModels
 {
@@ -7,7 +7,7 @@ namespace ZoomAttendance.Models.ResponseModels
     {
         public int Id { get; set; }
         public int MeetingId { get; set; }
-        public int StaffId { get; set; }
+        public Guid StaffId { get; set; }
         public string StaffName { get; set; } = string.Empty;
         public string StaffEmail { get; set; } = string.Empty;
         public int DepartmentId { get; set; }
@@ -54,10 +54,11 @@ namespace ZoomAttendance.Models.ResponseModels
         public string ZoomUrl { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
     }
+
     public class PendingVirtualConfirm
     {
         public int MeetingId { get; set; }
-        public int StaffId { get; set; }
+        public Guid StaffId { get; set; }
         public string StaffName { get; set; } = string.Empty;
         public string StaffEmail { get; set; } = string.Empty;
         public string MeetingTitle { get; set; } = string.Empty;

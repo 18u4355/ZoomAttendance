@@ -1,6 +1,6 @@
 ﻿// Repositories/Interfaces/IMeetingInviteRepository.cs
+// StaffId changed to Guid
 
-using ZoomAttendance.Models.RequestModels;
 using ZoomAttendance.Models.ResponseModels;
 
 namespace ZoomAttendance.Repositories.Interfaces
@@ -9,8 +9,7 @@ namespace ZoomAttendance.Repositories.Interfaces
     {
         Task<List<MeetingEmailPreviewResponse>> GetEmailsPreviewAsync(int meetingId);
         Task<SendInvitesResponse> SendInvitesAsync(int meetingId);
-        Task ResendInviteAsync(int meetingId, int staffId);
+        Task ResendInviteAsync(int meetingId, Guid staffId);
         Task<List<MeetingInviteResponse>> GetInvitesByMeetingAsync(int meetingId);
-        Task SaveLocationAsync(SaveMeetingLocationRequest request);
     }
 }

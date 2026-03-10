@@ -1,5 +1,5 @@
 ﻿// Controllers/MeetingInvitesController.cs
-// SaveLocation endpoint removed
+// ResendInvite staffId changed to Guid
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,10 +9,10 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/v1/meeting-invites")]
     [Produces("application/json")]
-    [Authorize]
     public class MeetingInvitesController : ControllerBase
     {
         private readonly IMeetingInviteRepository _inviteRepo;
@@ -65,8 +65,8 @@ namespace ZoomAttendance.Controllers
         }
 
         // POST api/v1/meeting-invites/{meetingId}/resend/{staffId}
-        [HttpPost("{meetingId}/resend/{staffId}")]
-        public async Task<IActionResult> ResendInvite(int meetingId, int staffId)
+        [HttpPost("{meetingId}/resend/{staffId:guid}")]
+        public async Task<IActionResult> ResendInvite(int meetingId, Guid staffId)
         {
             try
             {
@@ -106,9 +106,7 @@ namespace ZoomAttendance.Controllers
             try
             {
                 var result = await _attendanceRepo.PhysicalCheckInAsync(
-                    request.Token,
-                    request.Latitude,
-                    request.Longitude);
+                    request.Token, request.Latitude, request.Longitude);
                 return Ok(ApiResponse<CheckInResponse>.Success(result));
             }
             catch (InvalidOperationException ex)

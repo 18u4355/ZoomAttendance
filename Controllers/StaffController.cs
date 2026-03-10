@@ -1,4 +1,5 @@
 ﻿// Controllers/StaffController.cs
+// Id changed to Guid
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,10 +9,10 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/v1/staff")]
     [Produces("application/json")]
-    [Authorize]
     public class StaffController : ControllerBase
     {
         private readonly IStaffRepository _repo;
@@ -21,6 +22,7 @@ namespace ZoomAttendance.Controllers
             _repo = repo;
         }
 
+        // GET api/v1/staff
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] StaffFilterRequest filter)
         {
@@ -35,15 +37,15 @@ namespace ZoomAttendance.Controllers
             }
         }
 
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetById(int id)
+        // GET api/v1/staff/{id}
+        [HttpGet("{id:guid}")]
+        public async Task<IActionResult> GetById(Guid id)
         {
             try
             {
                 var data = await _repo.GetByIdAsync(id);
                 if (data == null)
                     return NotFound(ApiResponse<string>.Fail($"Staff with id '{id}' was not found."));
-
                 return Ok(ApiResponse<StaffResponse>.Success(data));
             }
             catch (Exception ex)
@@ -52,25 +54,27 @@ namespace ZoomAttendance.Controllers
             }
         }
 
+        // POST api/v1/staff
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateStaffRequest request)
         {
             try
             {
                 if (!ModelState.IsValid)
-                    return BadRequest(ApiResponse<string>.Fail("Validation failed.", ModelState.ToString()));
+                    return BadRequest(ApiResponse<string>.Fail("Validation failed."));
 
-                var created = await _repo.CreateAsync(request);
-                return CreatedAtAction(nameof(GetById), new { id = created.Id },
-                    ApiResponse<StaffResponse>.Success(created, "Staff member created successfully."));
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ApiResponse<string>.Fail(ex.Message));
+                var data = await _repo.CreateAsync(request);
+                return CreatedAtAction(nameof(GetById), new { id = data.Id },
+                    ApiResponse<StaffResponse>.Success(data, "Staff created successfully."));
             }
             catch (InvalidOperationException ex)
             {
-                return Conflict(ApiResponse<string>.Fail(ex.Message));
+                var msg = ex.Message;
+                if (msg.StartsWith("DUPLICATE:"))
+                    return Conflict(ApiResponse<string>.Fail(msg.Split(':', 2)[1]));
+                if (msg.StartsWith("NOT_FOUND:"))
+                    return NotFound(ApiResponse<string>.Fail(msg.Split(':', 2)[1]));
+                return BadRequest(ApiResponse<string>.Fail(msg));
             }
             catch (Exception ex)
             {
@@ -78,24 +82,26 @@ namespace ZoomAttendance.Controllers
             }
         }
 
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateStaffRequest request)
+        // PUT api/v1/staff/{id}
+        [HttpPut("{id:guid}")]
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateStaffRequest request)
         {
             try
             {
                 if (!ModelState.IsValid)
-                    return BadRequest(ApiResponse<string>.Fail("Validation failed.", ModelState.ToString()));
+                    return BadRequest(ApiResponse<string>.Fail("Validation failed."));
 
-                var updated = await _repo.UpdateAsync(id, request);
-                return Ok(ApiResponse<StaffResponse>.Success(updated, "Staff member updated successfully."));
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ApiResponse<string>.Fail(ex.Message));
+                var data = await _repo.UpdateAsync(id, request);
+                return Ok(ApiResponse<StaffResponse>.Success(data, "Staff updated successfully."));
             }
             catch (InvalidOperationException ex)
             {
-                return Conflict(ApiResponse<string>.Fail(ex.Message));
+                var msg = ex.Message;
+                if (msg.StartsWith("NOT_FOUND:"))
+                    return NotFound(ApiResponse<string>.Fail(msg.Split(':', 2)[1]));
+                if (msg.StartsWith("DUPLICATE:"))
+                    return Conflict(ApiResponse<string>.Fail(msg.Split(':', 2)[1]));
+                return BadRequest(ApiResponse<string>.Fail(msg));
             }
             catch (Exception ex)
             {
@@ -103,51 +109,49 @@ namespace ZoomAttendance.Controllers
             }
         }
 
-        [HttpPatch("{id:int}/status")]
-        public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateStaffStatusRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                    return BadRequest(ApiResponse<string>.Fail("Validation failed.", ModelState.ToString()));
-
-                await _repo.UpdateStatusAsync(id, request);
-                return Ok(ApiResponse<string>.Success("Staff status updated successfully."));
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ApiResponse<string>.Fail(ex.Message));
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(ApiResponse<string>.Fail(ex.Message));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
-            }
-        }
-
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
+        // DELETE api/v1/staff/{id}
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> Delete(Guid id)
         {
             try
             {
                 await _repo.DeleteAsync(id);
-                return Ok(ApiResponse<string>.Success("Staff member deleted successfully."));
+                return Ok(ApiResponse<string>.Success(null, "Staff deleted successfully."));
             }
-            catch (KeyNotFoundException ex)
+            catch (InvalidOperationException ex)
             {
-                return NotFound(ApiResponse<string>.Fail(ex.Message));
+                var msg = ex.Message;
+                if (msg.StartsWith("NOT_FOUND:"))
+                    return NotFound(ApiResponse<string>.Fail(msg.Split(':', 2)[1]));
+                return BadRequest(ApiResponse<string>.Fail(msg));
             }
             catch (Exception ex)
             {
                 return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
             }
         }
-        // Add these two endpoints to Controllers/StaffController.cs
-        // Also add this using if not present:
-        //   using Microsoft.AspNetCore.Http;
+
+        // PATCH api/v1/staff/{id}/status
+        [HttpPatch("{id:guid}/status")]
+        public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateStaffStatusRequest request)
+        {
+            try
+            {
+                await _repo.UpdateStatusAsync(id, request.Status);
+                return Ok(ApiResponse<string>.Success(null, "Staff status updated successfully."));
+            }
+            catch (InvalidOperationException ex)
+            {
+                var msg = ex.Message;
+                if (msg.StartsWith("NOT_FOUND:"))
+                    return NotFound(ApiResponse<string>.Fail(msg.Split(':', 2)[1]));
+                return BadRequest(ApiResponse<string>.Fail(msg));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
+        }
 
         // GET api/v1/staff/upload-template
         [HttpGet("upload-template")]
@@ -156,11 +160,9 @@ namespace ZoomAttendance.Controllers
             try
             {
                 var fileBytes = await _repo.GetUploadTemplateAsync();
-                return File(
-                    fileBytes,
+                return File(fileBytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "StaffUploadTemplate.xlsx"
-                );
+                    "StaffUploadTemplate.xlsx");
             }
             catch (Exception ex)
             {
@@ -176,7 +178,6 @@ namespace ZoomAttendance.Controllers
             {
                 if (file == null || file.Length == 0)
                     return BadRequest(ApiResponse<string>.Fail("No file uploaded."));
-
                 if (Path.GetExtension(file.FileName).ToLower() != ".xlsx")
                     return BadRequest(ApiResponse<string>.Fail("Only .xlsx files are accepted."));
 
@@ -187,6 +188,24 @@ namespace ZoomAttendance.Controllers
             catch (InvalidOperationException ex)
             {
                 return BadRequest(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
+        }
+
+        // GET api/v1/staff/export
+        [HttpGet("export")]
+        public async Task<IActionResult> Export([FromQuery] StaffFilterRequest filter)
+        {
+            try
+            {
+                var fileBytes = await _repo.ExportAsync(filter);
+                var fileName = $"Staff_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+                return File(fileBytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    fileName);
             }
             catch (Exception ex)
             {

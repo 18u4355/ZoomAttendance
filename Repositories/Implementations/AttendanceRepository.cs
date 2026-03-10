@@ -1,5 +1,5 @@
 ﻿// Repositories/Implementations/AttendanceRepository.cs
-// Full redraft — checkout removed, geofence moved to SP
+// StaffId changed to Guid throughout
 
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
@@ -27,7 +27,7 @@ namespace ZoomAttendance.Repositories.Implementations
         }
 
         // ── Initialize ────────────────────────────────────────────────────────
-        public async Task InitializeAsync(int meetingId, int staffId, string mode)
+        public async Task InitializeAsync(int meetingId, Guid staffId, string mode)
         {
             using var connection = new SqlConnection(_connectionString);
             using var command = new SqlCommand("sp_InitializeAttendance", connection)
@@ -46,7 +46,7 @@ namespace ZoomAttendance.Repositories.Implementations
         public async Task<CheckInResponse> PhysicalCheckInAsync(string token, decimal latitude, decimal longitude)
         {
             var claims = ValidateInviteToken(token);
-            var staffId = int.Parse(claims.First(c => c.Type == "staffId").Value);
+            var staffId = Guid.Parse(claims.First(c => c.Type == "staffId").Value);
             var meetingId = int.Parse(claims.First(c => c.Type == "meetingId").Value);
 
             using var connection = new SqlConnection(_connectionString);
@@ -54,7 +54,6 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
-
             command.Parameters.AddWithValue("@MeetingId", meetingId);
             command.Parameters.AddWithValue("@StaffId", staffId);
             command.Parameters.AddWithValue("@Latitude", latitude);
@@ -83,7 +82,7 @@ namespace ZoomAttendance.Repositories.Implementations
         public async Task<VirtualJoinResponse> VirtualJoinAsync(string token)
         {
             var claims = ValidateInviteToken(token);
-            var staffId = int.Parse(claims.First(c => c.Type == "staffId").Value);
+            var staffId = Guid.Parse(claims.First(c => c.Type == "staffId").Value);
             var meetingId = int.Parse(claims.First(c => c.Type == "meetingId").Value);
 
             using var connection = new SqlConnection(_connectionString);
@@ -91,7 +90,6 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
-
             command.Parameters.AddWithValue("@MeetingId", meetingId);
             command.Parameters.AddWithValue("@StaffId", staffId);
 
@@ -118,7 +116,7 @@ namespace ZoomAttendance.Repositories.Implementations
         public async Task<CheckInResponse> VirtualEndConfirmAsync(string token)
         {
             var claims = ValidateEndConfirmToken(token);
-            var staffId = int.Parse(claims.First(c => c.Type == "staffId").Value);
+            var staffId = Guid.Parse(claims.First(c => c.Type == "staffId").Value);
             var meetingId = int.Parse(claims.First(c => c.Type == "meetingId").Value);
 
             using var connection = new SqlConnection(_connectionString);
@@ -126,7 +124,6 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
-
             command.Parameters.AddWithValue("@MeetingId", meetingId);
             command.Parameters.AddWithValue("@StaffId", staffId);
 
@@ -139,17 +136,13 @@ namespace ZoomAttendance.Repositories.Implementations
                 if (!string.IsNullOrEmpty(errorCode))
                     throw new InvalidOperationException(reader["ErrorMessage"].ToString());
 
-                return new CheckInResponse
-                {
-                    Status = "present",
-                    Message = "Attendance confirmed. Thank you."
-                };
+                return new CheckInResponse { Status = "present", Message = "Attendance confirmed. Thank you." };
             }
 
             throw new InvalidOperationException("Unexpected error during end confirmation.");
         }
 
-        // ── Get Attendance By Meeting ─────────────────────────────────────────
+        // ── Get Attendance ────────────────────────────────────────────────────
         public async Task<PagedAttendanceResponse> GetAttendanceAsync(int meetingId, AttendanceFilterRequest filter)
         {
             var records = new List<AttendanceResponse>();
@@ -160,7 +153,6 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
-
             command.Parameters.AddWithValue("@MeetingId", meetingId);
             command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
             command.Parameters.AddWithValue("@DepartmentId", (object?)filter.DepartmentId ?? DBNull.Value);
@@ -172,9 +164,7 @@ namespace ZoomAttendance.Repositories.Implementations
 
             while (await reader.ReadAsync())
             {
-                if (total == 0)
-                    total = reader.GetInt32(reader.GetOrdinal("TotalCount"));
-
+                if (total == 0) total = reader.GetInt32(reader.GetOrdinal("TotalCount"));
                 records.Add(MapFromReader(reader));
             }
 
@@ -188,7 +178,7 @@ namespace ZoomAttendance.Repositories.Implementations
             };
         }
 
-        // ── Get Summary ───────────────────────────────────────────────────────
+        // ── Summary ───────────────────────────────────────────────────────────
         public async Task<AttendanceSummaryResponse> GetSummaryAsync(int meetingId)
         {
             using var connection = new SqlConnection(_connectionString);
@@ -218,22 +208,6 @@ namespace ZoomAttendance.Repositories.Implementations
             return new AttendanceSummaryResponse();
         }
 
-        // ── Manual Status Override ────────────────────────────────────────────
-        public async Task UpdateStatusAsync(int meetingId, int staffId, string status)
-        {
-            using var connection = new SqlConnection(_connectionString);
-            using var command = new SqlCommand("sp_UpdateAttendanceStatus", connection)
-            {
-                CommandType = CommandType.StoredProcedure
-            };
-            command.Parameters.AddWithValue("@MeetingId", meetingId);
-            command.Parameters.AddWithValue("@StaffId", staffId);
-            command.Parameters.AddWithValue("@Status", status);
-
-            await connection.OpenAsync();
-            await command.ExecuteNonQueryAsync();
-        }
-
         // ── Export ────────────────────────────────────────────────────────────
         public async Task<byte[]> ExportAsync(int meetingId, AttendanceFilterRequest filter)
         {
@@ -244,7 +218,6 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
-
             command.Parameters.AddWithValue("@MeetingId", meetingId);
             command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
             command.Parameters.AddWithValue("@DepartmentId", (object?)filter.DepartmentId ?? DBNull.Value);
@@ -258,7 +231,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 {
                     Id = reader.GetInt32(reader.GetOrdinal("Id")),
                     MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
-                    StaffId = reader.GetInt32(reader.GetOrdinal("StaffId")),
+                    StaffId = reader.GetGuid(reader.GetOrdinal("StaffId")),
                     StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
                     StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
                     DepartmentName = reader.GetString(reader.GetOrdinal("DepartmentName")),
@@ -271,20 +244,11 @@ namespace ZoomAttendance.Repositories.Implementations
                 });
             }
 
-            var headers = new[]
-            {
-                "Staff Name", "Email", "Department", "Mode", "Status",
-                "Check-In Time", "Within Fence",
-                "Joined At", "Confirmed At"
-            };
-
+            var headers = new[] { "Staff Name", "Email", "Department", "Mode", "Status",
+                                   "Check-In Time", "Within Fence", "Joined At", "Confirmed At" };
             var rows = records.Select(a => new List<object?>
             {
-                a.StaffName,
-                a.StaffEmail,
-                a.DepartmentName,
-                a.Mode,
-                a.Status,
+                a.StaffName, a.StaffEmail, a.DepartmentName, a.Mode, a.Status,
                 a.CheckInAt?.ToString("yyyy-MM-dd HH:mm:ss")   ?? "-",
                 a.CheckInWithinFence.HasValue ? (a.CheckInWithinFence.Value ? "Yes" : "No") : "-",
                 a.JoinedAt?.ToString("yyyy-MM-dd HH:mm:ss")    ?? "-",
@@ -294,7 +258,7 @@ namespace ZoomAttendance.Repositories.Implementations
             return ExcelExportHelper.GenerateExcel("Attendance", headers, rows);
         }
 
-        // ── Get Pending Virtual Confirms (for background job) ─────────────────
+        // ── Pending Virtual Confirms ──────────────────────────────────────────
         public async Task<List<PendingVirtualConfirm>> GetPendingVirtualConfirmsAsync()
         {
             var list = new List<PendingVirtualConfirm>();
@@ -313,11 +277,11 @@ namespace ZoomAttendance.Repositories.Implementations
                 list.Add(new PendingVirtualConfirm
                 {
                     MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
-                    StaffId = reader.GetInt32(reader.GetOrdinal("StaffId")),
+                    StaffId = reader.GetGuid(reader.GetOrdinal("StaffId")),
                     StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
                     StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
                     MeetingTitle = reader.GetString(reader.GetOrdinal("MeetingTitle")),
-                    EndConfirmToken = reader.GetString(reader.GetOrdinal("EndConfirmToken")),
+                    EndConfirmToken = reader.IsDBNull(reader.GetOrdinal("EndConfirmToken")) ? string.Empty : reader.GetString(reader.GetOrdinal("EndConfirmToken")),
                 });
             }
 
@@ -325,7 +289,7 @@ namespace ZoomAttendance.Repositories.Implementations
         }
 
         // ── Save End Confirm Token ────────────────────────────────────────────
-        public async Task SaveEndConfirmTokenAsync(int meetingId, int staffId, string token)
+        public async Task SaveEndConfirmTokenAsync(int meetingId, Guid staffId, string token)
         {
             using var connection = new SqlConnection(_connectionString);
             using var command = new SqlCommand("sp_SaveEndConfirmToken", connection)
@@ -340,7 +304,7 @@ namespace ZoomAttendance.Repositories.Implementations
             await command.ExecuteNonQueryAsync();
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────
+        // ── Private Helpers ───────────────────────────────────────────────────
         private IEnumerable<Claim> ValidateInviteToken(string token)
         {
             var secret = _configuration["AppSettings:JwtInviteSecret"]!;
@@ -371,7 +335,7 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 Id = reader.GetInt32(reader.GetOrdinal("Id")),
                 MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
-                StaffId = reader.GetInt32(reader.GetOrdinal("StaffId")),
+                StaffId = reader.GetGuid(reader.GetOrdinal("StaffId")),
                 StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
                 StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
                 DepartmentId = reader.GetInt32(reader.GetOrdinal("DepartmentId")),

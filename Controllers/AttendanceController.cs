@@ -95,31 +95,5 @@ namespace ZoomAttendance.Controllers
                 return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
             }
         }
-
-        // PATCH api/v1/attendance/status
-        [HttpPatch("status")]
-        public async Task<IActionResult> UpdateStatus([FromBody] ManualStatusUpdateRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                    return BadRequest(ApiResponse<string>.Fail("Validation failed."));
-
-                await _repo.UpdateStatusAsync(request.MeetingId, request.StaffId, request.Status);
-                return Ok(ApiResponse<string>.Success(null, "Attendance status updated successfully."));
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ApiResponse<string>.Fail(ex.Message));
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(ApiResponse<string>.Fail(ex.Message));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
-            }
-        }
     }
 }
