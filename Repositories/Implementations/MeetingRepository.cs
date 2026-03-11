@@ -118,7 +118,7 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
             command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
             command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
-            command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomUrl ?? DBNull.Value);
+            command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomJoinUrl ?? DBNull.Value);
             command.Parameters.AddWithValue("@DepartmentIds", (object?)departmentIds ?? DBNull.Value);
 
             await connection.OpenAsync();
@@ -169,7 +169,7 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
             command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
             command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
-            command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomUrl ?? DBNull.Value);
+            command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomJoinUrl ?? DBNull.Value);
             command.Parameters.AddWithValue("@Status", request.Status.ToLower().Trim());
             command.Parameters.AddWithValue("@DepartmentIds", (object?)departmentIds ?? DBNull.Value);
 
@@ -272,7 +272,7 @@ namespace ZoomAttendance.Repositories.Implementations
                     StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                     DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
                     Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
-                    ZoomUrl = reader.IsDBNull(reader.GetOrdinal("ZoomUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomUrl")),
+                    ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomJoinUrl")),
                     Status = reader.GetString(reader.GetOrdinal("Status")),
                     CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                     UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
@@ -294,7 +294,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 m.StartDatetime.ToString("yyyy-MM-dd HH:mm:ss"),
                 m.DurationMinutes,
                 m.Location  ?? "-",
-                m.ZoomUrl   ?? "-",
+                m.ZoomJoinUrl   ?? "-",
                 m.Status,
                 m.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
                 m.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
@@ -313,7 +313,7 @@ namespace ZoomAttendance.Repositories.Implementations
             StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
             DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
             Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
-            ZoomUrl = reader.IsDBNull(reader.GetOrdinal("ZoomUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomUrl")),
+            ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomJoinUrl")),
             Status = reader.GetString(reader.GetOrdinal("Status")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))

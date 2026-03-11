@@ -17,7 +17,7 @@ namespace ZoomAttendance.Models.ResponseModels
         public DateTime StartDatetime { get; set; }
         public int DurationMinutes { get; set; }
         public string? Location { get; set; }
-        public string? ZoomUrl { get; set; }
+        public string? ZoomJoinUrl { get; set; }
         public string Status { get; set; } = string.Empty;
         public List<MeetingDepartmentResponse> Departments { get; set; } = new();
         public DateTime CreatedAt { get; set; }

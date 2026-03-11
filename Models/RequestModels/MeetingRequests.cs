@@ -25,7 +25,7 @@ namespace ZoomAttendance.Models.RequestModels
 
         public string? Location { get; set; }   // required if mode is physical or hybrid
 
-        public string? ZoomUrl { get; set; }    // required if mode is virtual or hybrid
+        public string? ZoomJoinUrl { get; set; }    // required if mode is virtual or hybrid
 
         public List<int>? DepartmentIds { get; set; } // required if audience_type is departments
     }
@@ -51,7 +51,7 @@ namespace ZoomAttendance.Models.RequestModels
 
         public string? Location { get; set; }   // required if mode is physical or hybrid
 
-        public string? ZoomUrl { get; set; }    // required if mode is virtual or hybrid
+        public string? ZoomJoinUrl { get; set; }    // required if mode is virtual or hybrid
 
         [Required(ErrorMessage = "Status is required.")]
         public string Status { get; set; } = string.Empty;
