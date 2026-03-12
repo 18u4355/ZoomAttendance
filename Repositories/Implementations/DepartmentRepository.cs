@@ -142,8 +142,6 @@ namespace ZoomAttendance.Repositories.Implementations
                     throw new InvalidOperationException(errorMessage);
             }
         }
-        // Add this method to DepartmentRepository.cs
-        // inside the class body
 
         public async Task<byte[]> ExportAsync()
         {
@@ -165,21 +163,20 @@ namespace ZoomAttendance.Repositories.Implementations
                     Id = reader.GetInt32(reader.GetOrdinal("Id")),
                     Name = reader.GetString(reader.GetOrdinal("Name")),
                     StaffCount = reader.GetInt32(reader.GetOrdinal("StaffCount")),
+                    MeetingCount = reader.GetInt32(reader.GetOrdinal("MeetingCount")),
                     CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                     UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
                 });
             }
 
-            var headers = new[] { "Id", "Name", "Staff Count", "Created At", "Updated At" };
+            var headers = new[] { "Id", "Name", "Staff Count", "Meeting Count", "Created At", "Updated At" };
 
             var rows = records.Select(d => new List<object?>
-            {
-                d.Id,
-                d.Name,
-                d.StaffCount,
-                d.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                d.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
-            });
+{
+    d.Id, d.Name, d.StaffCount, d.MeetingCount,
+    d.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+    d.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
+});
 
             return ExcelExportHelper.GenerateExcel("Departments", headers, rows);
         }
@@ -190,6 +187,7 @@ namespace ZoomAttendance.Repositories.Implementations
             Id = reader.GetInt32(reader.GetOrdinal("Id")),
             Name = reader.GetString(reader.GetOrdinal("Name")),
             StaffCount = reader.GetInt32(reader.GetOrdinal("StaffCount")),
+            MeetingCount = reader.GetInt32(reader.GetOrdinal("MeetingCount")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
         };
