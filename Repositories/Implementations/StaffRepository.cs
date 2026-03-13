@@ -111,9 +111,10 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
+
             command.Parameters.AddWithValue("@Id", id);
-            command.Parameters.AddWithValue("@Name", request.Name);
-            command.Parameters.AddWithValue("@Email", request.Email);
+            command.Parameters.AddWithValue("@Name", request.Name.Trim());
+            command.Parameters.AddWithValue("@Email", request.Email.Trim());
             command.Parameters.AddWithValue("@DepartmentId", request.DepartmentId);
 
             await connection.OpenAsync();
@@ -121,14 +122,24 @@ namespace ZoomAttendance.Repositories.Implementations
 
             if (await reader.ReadAsync())
             {
-                var errorCode = reader["ErrorCode"]?.ToString();
-                if (!string.IsNullOrEmpty(errorCode))
-                    throw new InvalidOperationException($"{errorCode}:{reader["ErrorMessage"]}");
+                if (reader.GetName(0) == "ErrorCode")
+                {
+                    var errorCode = reader["ErrorCode"]?.ToString();
+                    var errorMessage = reader["ErrorMessage"]?.ToString();
+
+                    if (errorCode == "NOT_FOUND")
+                        throw new KeyNotFoundException(errorMessage);
+
+                    if (errorCode == "DUPLICATE")
+                        throw new InvalidOperationException(errorMessage);
+
+                    throw new InvalidOperationException(errorMessage);
+                }
 
                 return MapFromReader(reader);
             }
 
-            throw new InvalidOperationException("Unexpected error during staff update.");
+            throw new InvalidOperationException("Failed to update staff.");
         }
 
         // ── Delete ────────────────────────────────────────────────────────────

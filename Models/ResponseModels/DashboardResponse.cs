@@ -39,7 +39,7 @@ namespace ZoomAttendance.Models.ResponseModels
         public DateTime StartDatetime { get; set; }
         public int DurationMinutes { get; set; }
         public string? Location { get; set; }
-        public string? ZoomUrl { get; set; }
+        public string? ZoomJoinUrl { get; set; }
     }
 
     public class QuickActionResponse

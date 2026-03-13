@@ -70,7 +70,7 @@ namespace ZoomAttendance.Repositories.Implementations
                     StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                     DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
                     Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
-                    ZoomUrl = reader.IsDBNull(reader.GetOrdinal("ZoomUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomUrl"))
+                    ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomJoinUrl"))
                 });
             }
 
