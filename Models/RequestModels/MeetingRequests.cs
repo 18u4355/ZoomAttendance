@@ -1,6 +1,4 @@
-﻿// Models/RequestModels/MeetingRequests.cs
-
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace ZoomAttendance.Models.RequestModels
 {
@@ -23,11 +21,12 @@ namespace ZoomAttendance.Models.RequestModels
         [Range(1, int.MaxValue, ErrorMessage = "Duration must be at least 1 minute.")]
         public int DurationMinutes { get; set; }
 
-        public string? Location { get; set; }   // required if mode is physical or hybrid
+        public string? Location { get; set; } // required if physical or hybrid
 
-        public string? ZoomJoinUrl { get; set; }    // required if mode is virtual or hybrid
+        public List<int>? DepartmentIds { get; set; }
 
-        public List<int>? DepartmentIds { get; set; } // required if audience_type is departments
+        // only if you want true hybrid split later
+        public List<Guid>? VirtualStaffIds { get; set; }
     }
 
     public class UpdateMeetingRequest
@@ -49,14 +48,14 @@ namespace ZoomAttendance.Models.RequestModels
         [Range(1, int.MaxValue, ErrorMessage = "Duration must be at least 1 minute.")]
         public int DurationMinutes { get; set; }
 
-        public string? Location { get; set; }   // required if mode is physical or hybrid
+        public string? Location { get; set; }
 
-        public string? ZoomJoinUrl { get; set; }    // required if mode is virtual or hybrid
-
-        [Required(ErrorMessage = "Status is required.")]
-        public string Status { get; set; } = string.Empty;
+        //[Required(ErrorMessage = "Status is required.")]
+        //public string Status { get; set; } = string.Empty;
 
         public List<int>? DepartmentIds { get; set; }
+
+        public List<Guid>? VirtualStaffIds { get; set; }
     }
 
     public class MeetingFilterRequest

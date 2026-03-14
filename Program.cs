@@ -9,6 +9,7 @@ using ZoomAttendance.Helpers;
 using ZoomAttendance.Repositories.Implementations;
 using ZoomAttendance.Repositories.Interfaces;
 using ZoomAttendance.Services;
+using ZoomAttendance.Models;
 
 internal class Program
 {
@@ -35,6 +36,12 @@ internal class Program
         builder.Services.AddScoped<IMeetingInviteRepository, MeetingInviteRepository>();
         builder.Services.AddHostedService<AttendanceBackgroundJob>();
         builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
+
+        builder.Services.AddHttpClient();
+        builder.Services.Configure<ZoomSettings>(builder.Configuration.GetSection("ZoomSettings"));
+        builder.Services.AddScoped<IZoomService, ZoomService>();
+        builder.Services.AddHostedService<InviteSchedulerBackgroundJob>();
+
 
         builder.Services.AddControllers()
             .AddJsonOptions(options =>

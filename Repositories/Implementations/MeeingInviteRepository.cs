@@ -77,34 +77,35 @@ namespace ZoomAttendance.Repositories.Implementations
         public async Task<SendInvitesResponse> SendInvitesAsync(int meetingId)
         {
             var previews = await GetEmailsPreviewAsync(meetingId);
-
-            // Get meeting details
             var meeting = await GetMeetingDetailsAsync(meetingId);
-            
+            var virtualStaffIds = await GetVirtualAttendeeIdsAsync(meetingId);
+
             int sent = 0, failed = 0;
 
             foreach (var staff in previews)
             {
                 try
                 {
+                    var attendanceMode = ResolveAttendanceMode((string)meeting.Mode, staff.StaffId, virtualStaffIds);
                     var expiresAt = meeting.StartDatetime.AddMinutes(meeting.DurationMinutes);
                     var token = GenerateInviteToken(staff.StaffId, meetingId, expiresAt);
-                   
-                    await SaveInviteAsync(meetingId, staff.StaffId, token, expiresAt);
-                    await _attendanceRepo.InitializeAsync(meetingId, staff.StaffId, (string)meeting.Mode);
+
+                    await SaveInviteAsync(meetingId, staff.StaffId, token, expiresAt, attendanceMode);
+                    await _attendanceRepo.InitializeAsync(meetingId, staff.StaffId, attendanceMode);
+
                     await _emailService.SendAttendanceLinkEmailAsync(
-     new ZoomAttendance.Entities.Staff { Name = staff.StaffName, Email = staff.Email },
-     new ZoomAttendance.Entities.Meeting
-     {
-         Id = meeting.Id,
-         Title = meeting.Title,
-         Mode = meeting.Mode,
-         StartDatetime = meeting.StartDatetime,
-         DurationMinutes = meeting.DurationMinutes,
-         ZoomUrl = meeting.ZoomUrl,
-         Location = meeting.Location,
-     },
-     token);
+                        new ZoomAttendance.Entities.Staff { Name = staff.StaffName, Email = staff.Email },
+                        new ZoomAttendance.Entities.Meeting
+                        {
+                            Id = meeting.Id,
+                            Title = meeting.Title,
+                            Mode = attendanceMode,
+                            StartDatetime = meeting.StartDatetime,
+                            DurationMinutes = meeting.DurationMinutes,
+                            ZoomJoinUrl = meeting.ZoomJoinUrl,
+                            Location = meeting.Location,
+                        },
+                        token);
 
                     sent++;
                 }
@@ -122,48 +123,6 @@ namespace ZoomAttendance.Repositories.Implementations
                 Failed = failed,
                 Message = $"Invites sent: {sent}, Failed: {failed}."
             };
-        }
-
-        // ── Resend Invite ─────────────────────────────────────────────────────
-        public async Task ResendInviteAsync(int meetingId, Guid staffId)
-        {
-            var meeting = await GetMeetingDetailsAsync(meetingId);
-
-            // Get staff details
-            using var connection = new SqlConnection(_connectionString);
-            using var command = new SqlCommand("sp_GetStaffById", connection)
-            {
-                CommandType = CommandType.StoredProcedure
-            };
-            command.Parameters.AddWithValue("@Id", staffId);
-
-            await connection.OpenAsync();
-            using var reader = await command.ExecuteReaderAsync();
-
-            if (!await reader.ReadAsync())
-                throw new KeyNotFoundException("Staff not found.");
-
-            var staffName = reader.GetString(reader.GetOrdinal("Name"));
-            var staffEmail = reader.GetString(reader.GetOrdinal("Email"));
-            await reader.CloseAsync();
-
-            var expiresAt = meeting.StartDatetime.AddMinutes(meeting.DurationMinutes);
-            var token = GenerateInviteToken(staffId, meetingId, expiresAt);
-
-            await SaveInviteAsync(meetingId, staffId, token, expiresAt);
-            await _emailService.SendAttendanceLinkEmailAsync(
-     new ZoomAttendance.Entities.Staff { Name = staffName, Email = staffEmail },
-     new ZoomAttendance.Entities.Meeting
-     {
-         Id = meeting.Id,
-         Title = meeting.Title,
-         Mode = meeting.Mode,
-         StartDatetime = meeting.StartDatetime,
-         DurationMinutes = meeting.DurationMinutes,
-         ZoomUrl = meeting.ZoomUrl,
-         Location = meeting.Location,
-     },
-     token);
         }
 
         // ── Get Invites By Meeting ────────────────────────────────────────────
@@ -204,17 +163,19 @@ namespace ZoomAttendance.Repositories.Implementations
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
-        private async Task SaveInviteAsync(int meetingId, Guid staffId, string token, DateTime expiresAt)
+        private async Task SaveInviteAsync(int meetingId, Guid staffId, string token, DateTime expiresAt, string attendanceMode)
         {
             using var connection = new SqlConnection(_connectionString);
             using var command = new SqlCommand("sp_SaveMeetingInvite", connection)
             {
                 CommandType = CommandType.StoredProcedure
             };
+
             command.Parameters.AddWithValue("@MeetingId", meetingId);
             command.Parameters.AddWithValue("@StaffId", staffId);
             command.Parameters.AddWithValue("@Token", token);
             command.Parameters.AddWithValue("@ExpiresAt", expiresAt);
+            command.Parameters.AddWithValue("@AttendanceMode", attendanceMode);
 
             await connection.OpenAsync();
             await command.ExecuteNonQueryAsync();
@@ -263,9 +224,89 @@ namespace ZoomAttendance.Repositories.Implementations
                 Mode = reader.GetString(reader.GetOrdinal("Mode")),
                 StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                 DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
-                ZoomUrl = reader.IsDBNull(reader.GetOrdinal("ZoomUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomUrl")),
+                ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomJoinUrl")),
                 Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
             };
         }
+
+        private async Task<HashSet<Guid>> GetVirtualAttendeeIdsAsync(int meetingId)
+        {
+            var ids = new HashSet<Guid>();
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetMeetingVirtualAttendees", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@MeetingId", meetingId);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                ids.Add(reader.GetGuid(reader.GetOrdinal("StaffId")));
+            }
+
+            return ids;
+        }
+
+        private static string ResolveAttendanceMode(string meetingMode, Guid staffId, HashSet<Guid> virtualStaffIds)
+        {
+            return meetingMode.ToLower().Trim() switch
+            {
+                "physical" => "physical",
+                "virtual" => "virtual",
+                "hybrid" => virtualStaffIds.Contains(staffId) ? "virtual" : "physical",
+                _ => throw new InvalidOperationException("Invalid meeting mode.")
+            };
+        }
+
+        public async Task ResendInviteAsync(int meetingId, Guid staffId)
+        {
+            var meeting = await GetMeetingDetailsAsync(meetingId);
+            var virtualStaffIds = await GetVirtualAttendeeIdsAsync(meetingId);
+            var attendanceMode = ResolveAttendanceMode((string)meeting.Mode, staffId, virtualStaffIds);
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetStaffById", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.AddWithValue("@Id", staffId);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (!await reader.ReadAsync())
+                throw new KeyNotFoundException("Staff not found.");
+
+            var staffName = reader.GetString(reader.GetOrdinal("Name"));
+            var staffEmail = reader.GetString(reader.GetOrdinal("Email"));
+            await reader.CloseAsync();
+
+            var expiresAt = meeting.StartDatetime.AddMinutes(meeting.DurationMinutes);
+            var token = GenerateInviteToken(staffId, meetingId, expiresAt);
+
+            await SaveInviteAsync(meetingId, staffId, token, expiresAt, attendanceMode);
+
+            await _emailService.SendAttendanceLinkEmailAsync(
+                new ZoomAttendance.Entities.Staff { Name = staffName, Email = staffEmail },
+                new ZoomAttendance.Entities.Meeting
+                {
+                    Id = meeting.Id,
+                    Title = meeting.Title,
+                    Mode = attendanceMode,
+                    StartDatetime = meeting.StartDatetime,
+                    DurationMinutes = meeting.DurationMinutes,
+                    ZoomJoinUrl = meeting.ZoomJoinUrl,
+                    Location = meeting.Location,
+                },
+                token);
+        }
+
+
+
     }
 }
