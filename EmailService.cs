@@ -1,8 +1,9 @@
 ﻿// Services/EmailService.cs
 
-using System.Net;
-using System.Net.Mail;
+using MailKit.Security;
+using MimeKit;
 using ZoomAttendance.Entities;
+using MailKit.Net.Smtp;
 
 namespace ZoomAttendance.Services
 {
@@ -16,6 +17,8 @@ namespace ZoomAttendance.Services
         }
 
         // ── Generic send ──────────────────────────────────────────────────────
+
+
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
             var host = _config["Email:SmtpHost"]!;
@@ -23,22 +26,24 @@ namespace ZoomAttendance.Services
             var user = _config["Email:SmtpUser"]!;
             var pass = _config["Email:SmtpPass"]!;
 
-            using var client = new SmtpClient(host, port)
-            {
-                Credentials = new NetworkCredential(user, pass),
-                EnableSsl = true
-            };
+            var email = new MimeMessage();
+            email.From.Add(new MailboxAddress("MeetTrack HR", user));
+            email.To.Add(MailboxAddress.Parse(toEmail));
+            email.Subject = subject;
+            email.Body = new BodyBuilder { HtmlBody = body }.ToMessageBody();
 
-            using var message = new MailMessage
-            {
-                From = new MailAddress(user, "MeetTrack HR"),
-                Subject = subject,
-                Body = body,
-                IsBodyHtml = true
-            };
+            using var client = new SmtpClient();
 
-            message.To.Add(toEmail);
-            await client.SendMailAsync(message);
+            // ← ADD THIS
+            if (_config["ASPNETCORE_ENVIRONMENT"] == "Development")
+            {
+                client.ServerCertificateValidationCallback = (s, c, h, e) => true;
+            }
+
+            await client.ConnectAsync(host, port, SecureSocketOptions.SslOnConnect);
+            await client.AuthenticateAsync(user, pass);
+            await client.SendAsync(email);
+            await client.DisconnectAsync(true);
         }
 
         // ── Attendance invite email (mode-aware) ──────────────────────────────
