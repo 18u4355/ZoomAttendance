@@ -145,5 +145,22 @@ namespace ZoomAttendance.Controllers
                 return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
             }
         }
+
+        [AllowAnonymous]
+        [HttpGet("attendance/join")]
+        public async Task<IActionResult> VirtualJoinLink([FromQuery] string token)
+        {
+            try
+            {
+                var result = await _attendanceRepo.VirtualJoinAsync(token);
+
+                // redirect user to Zoom
+                return Redirect(result.ZoomJoinUrl);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }
