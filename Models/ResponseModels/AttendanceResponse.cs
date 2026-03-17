@@ -51,7 +51,7 @@ namespace ZoomAttendance.Models.ResponseModels
 
     public class VirtualJoinResponse
     {
-        public string ZoomUrl { get; set; } = string.Empty;
+        public string ZoomJoinUrl { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
     }
 

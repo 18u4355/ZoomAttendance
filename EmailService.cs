@@ -46,7 +46,7 @@ namespace ZoomAttendance.Services
         {
             var baseUrl = _config["AppSettings:BaseUrl"]!;
             var confirmLink = $"{baseUrl}/attendance/confirm?token={token}";
-            var joinLink = $"{baseUrl}/attendance/join?token={token}";
+            var joinLink = $"{baseUrl}/api/v1/meeting-invites/attendance/join?token={token}";
 
             var linksHtml = meeting.Mode switch
             {
