@@ -104,7 +104,7 @@ namespace ZoomAttendance.Repositories.Implementations
 
                 return new VirtualJoinResponse
                 {
-                    ZoomUrl = reader["ZoomUrl"].ToString()!,
+                    ZoomJoinUrl = reader["ZoomJoinUrl"].ToString()!,
                     Message = "Attendance recorded. Redirecting to Zoom."
                 };
             }
