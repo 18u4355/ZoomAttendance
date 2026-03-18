@@ -34,11 +34,9 @@ namespace ZoomAttendance.Services
 
             using var client = new SmtpClient();
 
-            // ← ADD THIS
-            if (_config["ASPNETCORE_ENVIRONMENT"] == "Development")
-            {
-                client.ServerCertificateValidationCallback = (s, c, h, e) => true;
-            }
+     
+            client.ServerCertificateValidationCallback = (s, c, h, e) => true;
+            
 
             await client.ConnectAsync(host, port, SecureSocketOptions.SslOnConnect);
             await client.AuthenticateAsync(user, pass);
