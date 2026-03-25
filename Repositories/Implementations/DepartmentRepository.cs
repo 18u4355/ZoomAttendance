@@ -20,7 +20,10 @@ namespace ZoomAttendance.Repositories.Implementations
         }
 
         // ── Get All ───────────────────────────────────────────────────────────
-        public async Task<IEnumerable<DepartmentResponse>> GetAllAsync(bool includeInactive = false)
+        public async Task<IEnumerable<DepartmentResponse>> GetAllAsync(
+      string? status = null,
+      int pageNumber = 1,
+      int pageSize = 10)
         {
             var departments = new List<DepartmentResponse>();
 
@@ -29,7 +32,10 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
-            command.Parameters.AddWithValue("@IncludeInactive", includeInactive ? 1 : 0);
+
+            command.Parameters.AddWithValue("@Status", (object?)status ?? DBNull.Value);
+            command.Parameters.AddWithValue("@PageNumber", pageNumber);
+            command.Parameters.AddWithValue("@PageSize", pageSize);
 
             await connection.OpenAsync();
             using var reader = await command.ExecuteReaderAsync();
@@ -39,7 +45,6 @@ namespace ZoomAttendance.Repositories.Implementations
 
             return departments;
         }
-
         // ── Get By Id ─────────────────────────────────────────────────────────
         public async Task<DepartmentResponse?> GetByIdAsync(int id)
         {

@@ -23,11 +23,27 @@ namespace ZoomAttendance.Controllers
 
         // GET api/v1/departments?includeInactive=false
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false)
+        public async Task<IActionResult> GetAll(
+    [FromQuery] string? status,
+    [FromQuery] int pageNumber = 1,
+    [FromQuery] int pageSize = 10)
         {
             try
             {
-                var data = await _repo.GetAllAsync(includeInactive);
+                // Validate status
+                if (!string.IsNullOrEmpty(status))
+                {
+                    status = status.ToLower();
+                    if (status != "active" && status != "inactive")
+                        return BadRequest(ApiResponse<string>.Fail("Status must be 'active' or 'inactive'"));
+                }
+
+                // Validate pagination
+                if (pageNumber <= 0 || pageSize <= 0)
+                    return BadRequest(ApiResponse<string>.Fail("PageNumber and PageSize must be greater than 0"));
+
+                var data = await _repo.GetAllAsync(status, pageNumber, pageSize);
+
                 return Ok(ApiResponse<object>.Success(data));
             }
             catch (Exception ex)

@@ -7,7 +7,7 @@ namespace ZoomAttendance.Repositories.Interfaces
 {
     public interface IDepartmentRepository
     {
-        Task<IEnumerable<DepartmentResponse>> GetAllAsync(bool includeInactive = false);
+        Task<IEnumerable<DepartmentResponse>> GetAllAsync(string? status, int pageNumber,int pageSize);
         Task<DepartmentResponse?> GetByIdAsync(int id);
         Task<DepartmentResponse> CreateAsync(CreateDepartmentRequest request);
         Task<DepartmentResponse> UpdateAsync(int id, UpdateDepartmentRequest request);
