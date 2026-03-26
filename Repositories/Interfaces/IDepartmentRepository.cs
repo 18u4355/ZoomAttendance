@@ -11,8 +11,8 @@ namespace ZoomAttendance.Repositories.Interfaces
         Task<DepartmentResponse?> GetByIdAsync(int id);
         Task<DepartmentResponse> CreateAsync(CreateDepartmentRequest request);
         Task<DepartmentResponse> UpdateAsync(int id, UpdateDepartmentRequest request);
-        Task DeleteAsync(int id);
-        Task<DepartmentResponse> RestoreAsync(int id);
+        Task DeactivateAsync(int id);
+        Task<DepartmentResponse> ActivateAsync(int id);
         Task<byte[]> ExportAsync(bool includeInactive = false);
     }
 }

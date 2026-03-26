@@ -118,13 +118,12 @@ namespace ZoomAttendance.Controllers
             }
         }
 
-        // DELETE api/v1/departments/{id}  →  soft delete
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
+        [HttpPatch("{id:int}/deactivate")]
+        public async Task<IActionResult> Deactivate(int id)
         {
             try
             {
-                await _repo.DeleteAsync(id);
+                await _repo.DeactivateAsync(id);
                 return Ok(ApiResponse<string>.Success(null, "Department deactivated successfully."));
             }
             catch (KeyNotFoundException ex)
@@ -142,13 +141,13 @@ namespace ZoomAttendance.Controllers
         }
 
         // PATCH api/v1/departments/{id}/restore
-        [HttpPatch("{id:int}/restore")]
-        public async Task<IActionResult> Restore(int id)
+        [HttpPatch("{id:int}/activate")]
+        public async Task<IActionResult> Activate(int id)
         {
             try
             {
-                var data = await _repo.RestoreAsync(id);
-                return Ok(ApiResponse<DepartmentResponse>.Success(data, "Department restored successfully."));
+                var data = await _repo.ActivateAsync(id);
+                return Ok(ApiResponse<DepartmentResponse>.Success(data, "Department activated successfully."));
             }
             catch (KeyNotFoundException ex)
             {

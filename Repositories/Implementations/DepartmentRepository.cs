@@ -114,11 +114,11 @@ namespace ZoomAttendance.Repositories.Implementations
             throw new InvalidOperationException("Failed to update department.");
         }
 
-        // ── Soft Delete ───────────────────────────────────────────────────────
-        public async Task DeleteAsync(int id)
+        // ── Deactivate ───────────────────────────────────────────────────────
+        public async Task DeactivateAsync(int id)
         {
             using var connection = new SqlConnection(_connectionString);
-            using var command = new SqlCommand("sp_DeleteDepartment", connection)
+            using var command = new SqlCommand("sp_DeactivateDepartment", connection)
             {
                 CommandType = CommandType.StoredProcedure
             };
@@ -141,11 +141,11 @@ namespace ZoomAttendance.Repositories.Implementations
             }
         }
 
-        // ── Restore ───────────────────────────────────────────────────────────
-        public async Task<DepartmentResponse> RestoreAsync(int id)
+        // ── Activate ───────────────────────────────────────────────────────────
+        public async Task<DepartmentResponse> ActivateAsync(int id)
         {
             using var connection = new SqlConnection(_connectionString);
-            using var command = new SqlCommand("sp_RestoreDepartment", connection)
+            using var command = new SqlCommand("sp_ActivateDepartment", connection)
             {
                 CommandType = CommandType.StoredProcedure
             };
@@ -160,14 +160,17 @@ namespace ZoomAttendance.Repositories.Implementations
                 {
                     var errorCode = reader["ErrorCode"].ToString();
                     var errorMessage = reader["ErrorMessage"].ToString();
+
                     if (errorCode == "NOT_FOUND") throw new KeyNotFoundException(errorMessage);
                     if (errorCode == "ALREADY_ACTIVE") throw new InvalidOperationException(errorMessage);
+
                     throw new InvalidOperationException(errorMessage);
                 }
+
                 return MapToResponse(reader);
             }
 
-            throw new InvalidOperationException("Failed to restore department.");
+            throw new InvalidOperationException("Failed to activate department.");
         }
 
         // ── Export ────────────────────────────────────────────────────────────
