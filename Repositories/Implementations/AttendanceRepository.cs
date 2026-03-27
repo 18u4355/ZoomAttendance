@@ -1,7 +1,4 @@
-﻿// Repositories/Implementations/AttendanceRepository.cs
-// StaffId changed to Guid throughout
-
-using Microsoft.Data.SqlClient;
+﻿using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.Data;
@@ -143,7 +140,7 @@ namespace ZoomAttendance.Repositories.Implementations
         }
 
         // ── Get Attendance ────────────────────────────────────────────────────
-        public async Task<PagedAttendanceResponse> GetAttendanceAsync(int meetingId, AttendanceFilterRequest filter)
+        public async Task<PagedAttendanceResponse> GetAttendanceAsync(AttendanceFilterRequest filter)
         {
             var records = new List<AttendanceResponse>();
             int total = 0;
@@ -153,9 +150,13 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 CommandType = CommandType.StoredProcedure
             };
-            command.Parameters.AddWithValue("@MeetingId", meetingId);
-            command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
+
+            command.Parameters.AddWithValue("@MeetingTitle", (object?)filter.MeetingTitle ?? DBNull.Value);
+            command.Parameters.AddWithValue("@StaffName", (object?)filter.StaffName ?? DBNull.Value);
             command.Parameters.AddWithValue("@DepartmentId", (object?)filter.DepartmentId ?? DBNull.Value);
+            command.Parameters.AddWithValue("@Status", (object?)filter.Status ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DateFrom", (object?)filter.DateFrom ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DateTo", (object?)filter.DateTo ?? DBNull.Value);
             command.Parameters.AddWithValue("@Page", filter.Page);
             command.Parameters.AddWithValue("@Limit", filter.Limit);
 

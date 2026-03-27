@@ -7,6 +7,7 @@ namespace ZoomAttendance.Models.ResponseModels
     {
         public int Id { get; set; }
         public int MeetingId { get; set; }
+        public string MeetingTitle { get; set; } = string.Empty;
         public Guid StaffId { get; set; }
         public string StaffName { get; set; } = string.Empty;
         public string StaffEmail { get; set; } = string.Empty;

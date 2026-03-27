@@ -58,8 +58,12 @@ namespace ZoomAttendance.Models.RequestModels
 
     public class AttendanceFilterRequest
     {
-        public string? Status { get; set; }
+        public string? MeetingTitle { get; set; }
+        public string? StaffName { get; set; }
         public int? DepartmentId { get; set; }
+        public string? Status { get; set; } 
+        public DateTime? DateFrom { get; set; }
+        public DateTime? DateTo { get; set; }
         public int Page { get; set; } = 1;
         public int Limit { get; set; } = 20;
     }

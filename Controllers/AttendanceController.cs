@@ -22,12 +22,14 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/attendance/{meetingId}
-        [HttpGet("{meetingId:int}")]
-        public async Task<IActionResult> GetByMeeting(int meetingId, [FromQuery] AttendanceFilterRequest filter)
+
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> GetAttendance([FromQuery] AttendanceFilterRequest filter)
         {
             try
             {
-                var data = await _repo.GetAttendanceAsync(meetingId, filter);
+                var data = await _repo.GetAttendanceAsync(filter);
                 return Ok(ApiResponse<PagedAttendanceResponse>.Success(data));
             }
             catch (Exception ex)
