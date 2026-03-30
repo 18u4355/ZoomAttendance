@@ -40,6 +40,7 @@ internal class Program
         builder.Services.AddHttpClient();
         builder.Services.Configure<ZoomSettings>(builder.Configuration.GetSection("ZoomSettings"));
         builder.Services.AddScoped<IZoomService, ZoomService>();
+        builder.Services.AddScoped<IHrRepository, HrRepository>();
         builder.Services.AddHostedService<InviteSchedulerBackgroundJob>();
 
 
