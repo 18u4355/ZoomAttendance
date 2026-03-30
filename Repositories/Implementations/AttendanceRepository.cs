@@ -336,6 +336,7 @@ namespace ZoomAttendance.Repositories.Implementations
             {
                 Id = reader.GetInt32(reader.GetOrdinal("Id")),
                 MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
+                MeetingTitle = reader.IsDBNull(reader.GetOrdinal("MeetingTitle")) ? string.Empty : reader.GetString(reader.GetOrdinal("MeetingTitle")),
                 StaffId = reader.GetGuid(reader.GetOrdinal("StaffId")),
                 StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
                 StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),

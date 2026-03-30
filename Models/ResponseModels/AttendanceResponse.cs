@@ -1,7 +1,4 @@
-﻿// Models/ResponseModels/AttendanceResponse.cs
-// StaffId changed to Guid
-
-namespace ZoomAttendance.Models.ResponseModels
+﻿namespace ZoomAttendance.Models.ResponseModels
 {
     public class AttendanceResponse
     {
