@@ -352,5 +352,77 @@ namespace ZoomAttendance.Repositories.Implementations
                 UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
             };
         }
+        public async Task<StaffAttendanceReportResponse> GetStaffReportAsync(Guid staffId, StaffAttendanceReportRequest request)
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetStaffAttendanceReport", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@StaffId", staffId);
+            command.Parameters.AddWithValue("@DateFrom", (object?)request.DateFrom ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DateTo", (object?)request.DateTo ?? DBNull.Value);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            // Check for error row first
+            if (!await reader.ReadAsync())
+                throw new InvalidOperationException("No data returned.");
+
+            // If first column is ErrorCode it's an error row
+            try
+            {
+                var errorCode = reader["ErrorCode"]?.ToString();
+                if (!string.IsNullOrEmpty(errorCode))
+                    throw new KeyNotFoundException(reader["ErrorMessage"].ToString());
+            }
+            catch (IndexOutOfRangeException)
+            {
+                // No ErrorCode column — this is the summary row, continue normally
+            }
+
+            var report = new StaffAttendanceReportResponse
+            {
+                StaffId = reader.GetGuid(reader.GetOrdinal("StaffId")),
+                StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
+                StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
+                DepartmentName = reader.GetString(reader.GetOrdinal("DepartmentName")),
+                StaffStatus = reader.GetString(reader.GetOrdinal("StaffStatus")),
+                TotalInvited = reader.GetInt32(reader.GetOrdinal("TotalInvited")),
+                TotalPresent = reader.GetInt32(reader.GetOrdinal("TotalPresent")),
+                TotalAbsent = reader.GetInt32(reader.GetOrdinal("TotalAbsent")),
+                TotalJoined = reader.GetInt32(reader.GetOrdinal("TotalJoined")),
+                TotalLate = reader.GetInt32(reader.GetOrdinal("TotalLate")),
+                AttendanceRate = reader.GetDouble(reader.GetOrdinal("AttendanceRate")),
+            };
+
+            if (await reader.NextResultAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    report.Meetings.Add(new StaffMeetingRecord
+                    {
+                        AttendanceId = reader.GetInt32(reader.GetOrdinal("AttendanceId")),
+                        MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
+                        MeetingTitle = reader.GetString(reader.GetOrdinal("MeetingTitle")),
+                        MeetingMode = reader.GetString(reader.GetOrdinal("MeetingMode")),
+                        MeetingLocation = reader.IsDBNull(reader.GetOrdinal("MeetingLocation")) ? null : reader.GetString(reader.GetOrdinal("MeetingLocation")),
+                        StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
+                        DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
+                        Status = reader.GetString(reader.GetOrdinal("Status")),
+                        AttendanceMode = reader.GetString(reader.GetOrdinal("AttendanceMode")),
+                        CheckInAt = reader.IsDBNull(reader.GetOrdinal("CheckInAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CheckInAt")),
+                        CheckInWithinFence = reader.IsDBNull(reader.GetOrdinal("CheckInWithinFence")) ? null : reader.GetBoolean(reader.GetOrdinal("CheckInWithinFence")),
+                        JoinedAt = reader.IsDBNull(reader.GetOrdinal("JoinedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("JoinedAt")),
+                        ConfirmedAt = reader.IsDBNull(reader.GetOrdinal("ConfirmedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConfirmedAt")),
+                        CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                    });
+                }
+            }
+
+            return report;
+        }
     }
 }

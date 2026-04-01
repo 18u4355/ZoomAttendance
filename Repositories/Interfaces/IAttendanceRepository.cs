@@ -17,5 +17,6 @@ namespace ZoomAttendance.Repositories.Interfaces
         Task<List<PendingVirtualConfirm>> GetPendingVirtualConfirmsAsync();
         Task SaveEndConfirmTokenAsync(int meetingId, Guid staffId, string token);
         Task<PagedAttendanceResponse> GetAttendanceAsync(AttendanceFilterRequest filter);
+        Task<StaffAttendanceReportResponse> GetStaffReportAsync(Guid staffId, StaffAttendanceReportRequest request);
     }
 }

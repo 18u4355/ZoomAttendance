@@ -97,5 +97,23 @@ namespace ZoomAttendance.Controllers
                 return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
             }
         }
+        [Authorize]
+        [HttpGet("report/{staffId:guid}")]
+        public async Task<IActionResult> GetStaffReport(Guid staffId, [FromQuery] StaffAttendanceReportRequest request)
+        {
+            try
+            {
+                var data = await _repo.GetStaffReportAsync(staffId, request);
+                return Ok(ApiResponse<StaffAttendanceReportResponse>.Success(data));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
+        }
     }
 }
