@@ -23,6 +23,7 @@ namespace ZoomAttendance.Models.RequestModels
 
         public string? Location { get; set; } // required if physical or hybrid
 
+        public int? VenueId { get; set; }
         public List<int>? DepartmentIds { get; set; }
 
         // only if you want true hybrid split later
@@ -52,7 +53,7 @@ namespace ZoomAttendance.Models.RequestModels
 
         //[Required(ErrorMessage = "Status is required.")]
         //public string Status { get; set; } = string.Empty;
-
+        public int? VenueId { get; set; }
         public List<int>? DepartmentIds { get; set; }
 
         public List<Guid>? VirtualStaffIds { get; set; }

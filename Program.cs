@@ -42,6 +42,7 @@ internal class Program
         builder.Services.AddScoped<IZoomService, ZoomService>();
         builder.Services.AddScoped<IHrRepository, HrRepository>();
         builder.Services.AddHostedService<InviteSchedulerBackgroundJob>();
+        builder.Services.AddScoped<IVenueRepository, VenueRepository>();
 
 
         builder.Services.AddControllers()

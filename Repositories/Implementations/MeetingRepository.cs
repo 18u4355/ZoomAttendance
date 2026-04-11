@@ -194,6 +194,7 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
             command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
             command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
+            command.Parameters.AddWithValue("@VenueId", (object?)request.VenueId ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomJoinUrl", (object?)zoomJoinUrl ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomMeetingId", (object?)zoomMeetingId ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomStartUrl", (object?)zoomStartUrl ?? DBNull.Value);
@@ -347,6 +348,7 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
             command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);    
             command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
+            command.Parameters.AddWithValue("@VenueId", (object?)request.VenueId ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomJoinUrl", (object?)zoomJoinUrl ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomMeetingId", (object?)zoomMeetingId ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomStartUrl", (object?)zoomStartUrl ?? DBNull.Value);
@@ -518,7 +520,13 @@ namespace ZoomAttendance.Repositories.Implementations
                     : reader.GetString(reader.GetOrdinal("ZoomStartUrl")),
                 Status = reader.GetString(reader.GetOrdinal("Status")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+                VenueId = reader.IsDBNull(reader.GetOrdinal("VenueId")) ? null : reader.GetInt32(reader.GetOrdinal("VenueId")),
+                VenueName = reader.IsDBNull(reader.GetOrdinal("VenueName")) ? null : reader.GetString(reader.GetOrdinal("VenueName")),
+                VenueLatitude = reader.IsDBNull(reader.GetOrdinal("VenueLatitude")) ? null : reader.GetDecimal(reader.GetOrdinal("VenueLatitude")),
+                VenueLongitude = reader.IsDBNull(reader.GetOrdinal("VenueLongitude")) ? null : reader.GetDecimal(reader.GetOrdinal("VenueLongitude")),
+                VenueRadiusMetres = reader.IsDBNull(reader.GetOrdinal("VenueRadiusMetres")) ? null : reader.GetInt32(reader.GetOrdinal("VenueRadiusMetres")),
+
             };
         }
 

@@ -367,11 +367,9 @@ namespace ZoomAttendance.Repositories.Implementations
             await connection.OpenAsync();
             using var reader = await command.ExecuteReaderAsync();
 
-            // Check for error row first
+           
             if (!await reader.ReadAsync())
                 throw new InvalidOperationException("No data returned.");
-
-            // If first column is ErrorCode it's an error row
             try
             {
                 var errorCode = reader["ErrorCode"]?.ToString();
