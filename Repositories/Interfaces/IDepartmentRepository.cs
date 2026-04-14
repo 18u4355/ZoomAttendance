@@ -14,5 +14,6 @@ namespace ZoomAttendance.Repositories.Interfaces
         Task DeactivateAsync(int id);
         Task<DepartmentResponse> ActivateAsync(int id);
         Task<byte[]> ExportAsync(bool includeInactive = false);
+        Task<DepartmentMeetingSummaryResponse?> GetMeetingSummaryAsync(int deptId);
     }
 }

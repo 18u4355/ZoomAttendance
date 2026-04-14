@@ -216,5 +216,70 @@ namespace ZoomAttendance.Repositories.Implementations
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
         };
+
+        public async Task<DepartmentMeetingSummaryResponse?> GetMeetingSummaryAsync(int deptId)
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_GetDepartmentMeetingSummary", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.AddWithValue("@DeptId", deptId);
+
+            await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
+
+            // First result set — department summary header
+            if (!await reader.ReadAsync()) return null;
+
+            if (reader.GetName(0) == "ErrorCode")
+                return null;
+
+            var response = new DepartmentMeetingSummaryResponse
+            {
+                DeptId = reader.GetInt32(reader.GetOrdinal("DeptId")),
+                DeptName = reader.GetString(reader.GetOrdinal("DeptName")),
+                StaffCount = reader.GetInt32(reader.GetOrdinal("StaffCount")),
+                TotalMeetingsInvited = reader.GetInt32(reader.GetOrdinal("TotalMeetingsInvited")),
+                TotalAttended = reader.GetInt32(reader.GetOrdinal("TotalAttended")),
+                TotalMissed = reader.GetInt32(reader.GetOrdinal("TotalMissed")),
+                Meetings = new List<MeetingSummaryItem>()
+            };
+
+            // Second result set — meetings with staff
+            if (!await reader.NextResultAsync()) return response;
+
+            var meetingsDict = new Dictionary<int, MeetingSummaryItem>();
+
+            while (await reader.ReadAsync())
+            {
+                var meetingId = reader.GetInt32(reader.GetOrdinal("MeetingId"));
+
+                if (!meetingsDict.TryGetValue(meetingId, out var meeting))
+                {
+                    meeting = new MeetingSummaryItem
+                    {
+                        MeetingId = meetingId,
+                        Title = reader.GetString(reader.GetOrdinal("Title")),
+                        Mode = reader.GetString(reader.GetOrdinal("Mode")),
+                        StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
+                        Status = reader.GetString(reader.GetOrdinal("MeetingStatus")),
+                        Staff = new List<MeetingStaffItem>()
+                    };
+                    meetingsDict[meetingId] = meeting;
+                }
+
+                meeting.Staff.Add(new MeetingStaffItem
+                {
+                    StaffId = reader.GetGuid(reader.GetOrdinal("StaffId")),
+                    Name = reader.GetString(reader.GetOrdinal("StaffName")),
+                    Email = reader.GetString(reader.GetOrdinal("Email")),
+                    AttendanceStatus = reader.GetString(reader.GetOrdinal("AttendanceStatus"))
+                });
+            }
+
+            response.Meetings = meetingsDict.Values.ToList();
+            return response;
+        }
     }
 }

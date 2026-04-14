@@ -180,5 +180,22 @@ namespace ZoomAttendance.Controllers
                 return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
             }
         }
+
+        [HttpGet("{id:int}/meeting-summary")]
+        public async Task<IActionResult> GetMeetingSummary(int id)
+        {
+            try
+            {
+                var data = await _repo.GetMeetingSummaryAsync(id);
+                if (data == null)
+                    return NotFound(ApiResponse<string>.Fail($"Department with id '{id}' was not found."));
+
+                return Ok(ApiResponse<DepartmentMeetingSummaryResponse>.Success(data));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<string>.Fail("An unexpected error occurred.", ex.Message));
+            }
+        }
     }
 }
