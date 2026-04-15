@@ -103,55 +103,7 @@ namespace ZoomAttendance.Repositories.Implementations
             return meeting;
         }
 
-        //public async Task<MeetingResponse> CreateAsync(CreateMeetingRequest request)
-        //{
-        //    using var connection = new SqlConnection(_connectionString);
-        //    using var command = new SqlCommand("sp_CreateMeeting", connection)
-        //    {
-        //        CommandType = CommandType.StoredProcedure
-        //    };
 
-        //    var departmentIds = request.DepartmentIds != null && request.DepartmentIds.Any()
-        //        ? string.Join(",", request.DepartmentIds)
-        //        : null;
-
-        //    command.Parameters.AddWithValue("@Title", request.Title.Trim());
-        //    command.Parameters.AddWithValue("@Mode", request.Mode.ToLower().Trim());
-        //    command.Parameters.AddWithValue("@AudienceType", request.AudienceType.ToLower().Trim());
-        //    command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
-        //    command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
-        //    command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
-        //    command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomJoinUrl ?? DBNull.Value);
-        //    command.Parameters.AddWithValue("@DepartmentIds", (object?)departmentIds ?? DBNull.Value);
-
-        //    await connection.OpenAsync();
-        //    using var reader = await command.ExecuteReaderAsync();
-
-        //    if (await reader.ReadAsync())
-        //    {
-        //        if (reader.GetName(0) == "ErrorCode")
-        //            throw new InvalidOperationException(reader["ErrorMessage"].ToString());
-
-        //        var meeting = MapToResponse(reader);
-
-        //        // Second result set — departments
-        //        if (await reader.NextResultAsync())
-        //        {
-        //            while (await reader.ReadAsync())
-        //            {
-        //                meeting.Departments.Add(new MeetingDepartmentResponse
-        //                {
-        //                    Id = reader.GetInt32(reader.GetOrdinal("Id")),
-        //                    Name = reader.GetString(reader.GetOrdinal("Name"))
-        //                });
-        //            }
-        //        }
-
-        //        return meeting;
-        //    }
-
-        //    throw new InvalidOperationException("Failed to create meeting.");
-        //}
 
         public async Task<MeetingResponse> CreateAsync(CreateMeetingRequest request)
         {
@@ -521,11 +473,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 Status = reader.GetString(reader.GetOrdinal("Status")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                 UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
-                VenueId = reader.IsDBNull(reader.GetOrdinal("VenueId")) ? null : reader.GetInt32(reader.GetOrdinal("VenueId")),
-                VenueName = reader.IsDBNull(reader.GetOrdinal("VenueName")) ? null : reader.GetString(reader.GetOrdinal("VenueName")),
-                VenueLatitude = reader.IsDBNull(reader.GetOrdinal("VenueLatitude")) ? null : reader.GetDecimal(reader.GetOrdinal("VenueLatitude")),
-                VenueLongitude = reader.IsDBNull(reader.GetOrdinal("VenueLongitude")) ? null : reader.GetDecimal(reader.GetOrdinal("VenueLongitude")),
-                VenueRadiusMetres = reader.IsDBNull(reader.GetOrdinal("VenueRadiusMetres")) ? null : reader.GetInt32(reader.GetOrdinal("VenueRadiusMetres")),
+               
 
             };
         }
