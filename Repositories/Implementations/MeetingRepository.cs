@@ -102,6 +102,12 @@ namespace ZoomAttendance.Repositories.Implementations
 
             return meeting;
         }
+<<<<<<< HE
+=======
+
+
+
+>>>>>>> a4b6298248d012af1589f31b1b856ca0e0ad5542
         public async Task<MeetingResponse> CreateAsync(CreateMeetingRequest request)
         {
             var mode = request.Mode.ToLower().Trim();
@@ -410,11 +416,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 Status = reader.GetString(reader.GetOrdinal("Status")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                 UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
-                VenueId = reader.IsDBNull(reader.GetOrdinal("VenueId")) ? null : reader.GetInt32(reader.GetOrdinal("VenueId")),
-                VenueName = reader.IsDBNull(reader.GetOrdinal("VenueName")) ? null : reader.GetString(reader.GetOrdinal("VenueName")),
-                VenueLatitude = reader.IsDBNull(reader.GetOrdinal("VenueLatitude")) ? null : reader.GetDecimal(reader.GetOrdinal("VenueLatitude")),
-                VenueLongitude = reader.IsDBNull(reader.GetOrdinal("VenueLongitude")) ? null : reader.GetDecimal(reader.GetOrdinal("VenueLongitude")),
-                VenueRadiusMetres = reader.IsDBNull(reader.GetOrdinal("VenueRadiusMetres")) ? null : reader.GetInt32(reader.GetOrdinal("VenueRadiusMetres")),
+               
 
             };
         }
