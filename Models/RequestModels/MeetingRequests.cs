@@ -21,8 +21,6 @@ namespace ZoomAttendance.Models.RequestModels
         [Range(1, int.MaxValue, ErrorMessage = "Duration must be at least 1 minute.")]
         public int DurationMinutes { get; set; }
 
-        public string? Location { get; set; } // required if physical or hybrid
-
         public int? VenueId { get; set; }
         public List<int>? DepartmentIds { get; set; }
 

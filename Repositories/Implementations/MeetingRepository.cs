@@ -102,12 +102,6 @@ namespace ZoomAttendance.Repositories.Implementations
 
             return meeting;
         }
-<<<<<<< HE
-=======
-
-
-
->>>>>>> a4b6298248d012af1589f31b1b856ca0e0ad5542
         public async Task<MeetingResponse> CreateAsync(CreateMeetingRequest request)
         {
             var mode = request.Mode.ToLower().Trim();
@@ -148,7 +142,6 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@AudienceType", audienceType);
             command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
             command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
-            command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
             command.Parameters.AddWithValue("@VenueId", (object?)request.VenueId ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomJoinUrl", (object?)zoomJoinUrl ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomMeetingId", (object?)zoomMeetingId ?? DBNull.Value);
@@ -401,9 +394,6 @@ namespace ZoomAttendance.Repositories.Implementations
                 InvitesSentAt = reader.IsDBNull(reader.GetOrdinal("InvitesSentAt"))
                     ? null
                     : reader.GetDateTime(reader.GetOrdinal("InvitesSentAt")),
-                Location = reader.IsDBNull(reader.GetOrdinal("Location"))
-                    ? null
-                    : reader.GetString(reader.GetOrdinal("Location")),
                 ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl"))
                     ? null
                     : reader.GetString(reader.GetOrdinal("ZoomJoinUrl")), 
