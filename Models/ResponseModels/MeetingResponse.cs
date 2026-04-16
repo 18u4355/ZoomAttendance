@@ -29,15 +29,11 @@ namespace ZoomAttendance.Models.ResponseModels
         public string? ZoomStartUrl { get; set; }
 
         public string Status { get; set; } = string.Empty;
-        public int? VenueId { get; set; }
-        public string? VenueName { get; set; }
-        public decimal? VenueLatitude { get; set; }
-        public decimal? VenueLongitude { get; set; }
-        public int? VenueRadiusMetres { get; set; }
         public List<MeetingDepartmentResponse> Departments { get; set; } = new();
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
+
 
     public class PagedMeetingResponse
     {
