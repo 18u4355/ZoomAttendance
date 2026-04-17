@@ -1,6 +1,4 @@
-﻿// Repositories/Implementations/MeetingRepository.cs
-
-using Microsoft.Data.SqlClient;
+﻿using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using System.Data;
 using ZoomAttendance.Helpers;
@@ -133,12 +131,10 @@ namespace ZoomAttendance.Repositories.Implementations
             };
 
             var departmentIds = request.DepartmentIds != null && request.DepartmentIds.Any()
-                ? string.Join(",", request.DepartmentIds)
-                : null;
+                ? string.Join(",", request.DepartmentIds) : null;
 
             var virtualStaffIds = request.VirtualStaffIds != null && request.VirtualStaffIds.Any()
-                ? string.Join(",", request.VirtualStaffIds)
-                : null;
+                ? string.Join(",", request.VirtualStaffIds) : null;
 
             command.Parameters.AddWithValue("@Title", request.Title.Trim());
             command.Parameters.AddWithValue("@Mode", mode);
@@ -180,66 +176,6 @@ namespace ZoomAttendance.Repositories.Implementations
 
             throw new InvalidOperationException("Failed to create meeting.");
         }
-
-        //public async Task<MeetingResponse> UpdateAsync(int id, UpdateMeetingRequest request)
-        //{
-        //    using var connection = new SqlConnection(_connectionString);
-        //    using var command = new SqlCommand("sp_UpdateMeeting", connection)
-        //    {
-        //        CommandType = CommandType.StoredProcedure
-        //    };
-
-        //    var departmentIds = request.DepartmentIds != null && request.DepartmentIds.Any()
-        //        ? string.Join(",", request.DepartmentIds)
-        //        : null;
-
-        //    command.Parameters.AddWithValue("@Id", id);
-        //    command.Parameters.AddWithValue("@Title", request.Title.Trim());
-        //    command.Parameters.AddWithValue("@Mode", request.Mode.ToLower().Trim());
-        //    command.Parameters.AddWithValue("@AudienceType", request.AudienceType.ToLower().Trim());
-        //    command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
-        //    command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
-        //    command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
-        //    command.Parameters.AddWithValue("@ZoomUrl", (object?)request.ZoomJoinUrl ?? DBNull.Value);
-        //    command.Parameters.AddWithValue("@Status", request.Status.ToLower().Trim());
-        //    command.Parameters.AddWithValue("@DepartmentIds", (object?)departmentIds ?? DBNull.Value);
-
-        //    await connection.OpenAsync();
-        //    using var reader = await command.ExecuteReaderAsync();
-
-        //    if (await reader.ReadAsync())
-        //    {
-        //        if (reader.GetName(0) == "ErrorCode")
-        //        {
-        //            var errorCode = reader["ErrorCode"].ToString();
-        //            var errorMessage = reader["ErrorMessage"].ToString();
-
-        //            if (errorCode == "NOT_FOUND")
-        //                throw new KeyNotFoundException(errorMessage);
-
-        //            throw new InvalidOperationException(errorMessage);
-        //        }
-
-        //        var meeting = MapToResponse(reader);
-
-        //        // Second result set — departments
-        //        if (await reader.NextResultAsync())
-        //        {
-        //            while (await reader.ReadAsync())
-        //            {
-        //                meeting.Departments.Add(new MeetingDepartmentResponse
-        //                {
-        //                    Id = reader.GetInt32(reader.GetOrdinal("Id")),
-        //                    Name = reader.GetString(reader.GetOrdinal("Name"))
-        //                });
-        //            }
-        //        }
-
-        //        return meeting;
-        //    }
-
-        //    throw new InvalidOperationException("Failed to update meeting.");
-        //}
 
         public async Task<MeetingResponse> UpdateAsync(int id, UpdateMeetingRequest request)
         {
@@ -370,10 +306,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 }
             }
         }
-        // Add this method to MeetingRepository.cs
-        // inside the class body
-        // Also add at top: using ZoomAttendance.Helpers;
-
+ 
         public async Task<byte[]> ExportAsync(MeetingFilterRequest filter)
         {
             var records = new List<MeetingResponse>();
