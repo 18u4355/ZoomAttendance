@@ -6,6 +6,9 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    /// <summary>
+    /// Manages venue records used for physical and hybrid meeting geofencing.
+    /// </summary>
     [Authorize]
     [ApiController]
     [Route("api/v1/venues")]
@@ -21,6 +24,11 @@ namespace ZoomAttendance.Controllers
 
         // GET api/v1/venues
         // GET api/v1/venues?includeInactive=true
+        /// <summary>
+        /// Retrieves all venues, optionally including inactive venues.
+        /// </summary>
+        /// <param name="includeInactive">When true, inactive venues are included in the response.</param>
+        /// <returns>A collection of venue records.</returns>
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false)
         {
@@ -36,6 +44,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/venues/{id}
+        /// <summary>
+        /// Retrieves a single venue by its identifier.
+        /// </summary>
+        /// <param name="id">The identifier of the venue.</param>
+        /// <returns>The requested venue record when found.</returns>
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -53,6 +66,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // POST api/v1/venues
+        /// <summary>
+        /// Creates a new venue, including the coordinates and radius used for geofencing.
+        /// </summary>
+        /// <param name="request">The venue creation payload.</param>
+        /// <returns>The created venue record.</returns>
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateVenueRequest request)
         {
@@ -79,6 +97,12 @@ namespace ZoomAttendance.Controllers
         }
 
         // PUT api/v1/venues/{id}
+        /// <summary>
+        /// Updates an existing venue.
+        /// </summary>
+        /// <param name="id">The identifier of the venue to update.</param>
+        /// <param name="request">The updated venue payload.</param>
+        /// <returns>The updated venue record.</returns>
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateVenueRequest request)
         {
@@ -108,6 +132,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // DELETE api/v1/venues/{id}
+        /// <summary>
+        /// Deactivates a venue so it is no longer available for new meetings.
+        /// </summary>
+        /// <param name="id">The identifier of the venue to deactivate.</param>
+        /// <returns>A success message when deactivation completes.</returns>
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {

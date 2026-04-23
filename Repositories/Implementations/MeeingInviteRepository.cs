@@ -90,7 +90,14 @@ namespace ZoomAttendance.Repositories.Implementations
                     var expiresAt = meeting.StartDatetime.AddMinutes(meeting.DurationMinutes);
                     var token = GenerateInviteToken(staff.StaffId, meetingId, expiresAt);
 
-                    await SaveInviteAsync(meetingId, staff.StaffId, token, expiresAt, attendanceMode);
+                    await SaveInviteAsync(
+                        meetingId,
+                        staff.StaffId,
+                        token,
+                        expiresAt,
+                        attendanceMode,
+                        null,
+                        null);
                     await _attendanceRepo.InitializeAsync(meetingId, staff.StaffId, attendanceMode);
 
                     await _emailService.SendAttendanceLinkEmailAsync(
@@ -103,7 +110,8 @@ namespace ZoomAttendance.Repositories.Implementations
                             StartDatetime = meeting.StartDatetime,
                             DurationMinutes = meeting.DurationMinutes,
                             ZoomJoinUrl = meeting.ZoomJoinUrl,
-                            Location = meeting.Location,
+                            VenueId = meeting.VenueId,
+                            VenueName = meeting.VenueName,
                         },
                         token);
 
@@ -150,11 +158,14 @@ namespace ZoomAttendance.Repositories.Implementations
                     StaffName = reader.GetString(reader.GetOrdinal("StaffName")),
                     StaffEmail = reader.GetString(reader.GetOrdinal("StaffEmail")),
                     Token = reader.GetString(reader.GetOrdinal("Token")),
+                    AttendanceMode = reader.IsDBNull(reader.GetOrdinal("AttendanceMode")) ? null : reader.GetString(reader.GetOrdinal("AttendanceMode")),
                     SentAt = reader.IsDBNull(reader.GetOrdinal("SentAt")) ? null : reader.GetDateTime(reader.GetOrdinal("SentAt")),
                     ResentAt = reader.IsDBNull(reader.GetOrdinal("ResentAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ResentAt")),
                     ExpiresAt = reader.IsDBNull(reader.GetOrdinal("ExpiresAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpiresAt")),
                     ConfirmedAt = reader.IsDBNull(reader.GetOrdinal("ConfirmedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ConfirmedAt")),
                     JoinedAt = reader.IsDBNull(reader.GetOrdinal("JoinedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("JoinedAt")),
+                    ZoomRegistrantId = GetNullableString(reader, "ZoomRegistrantId"),
+                    ZoomRegistrantJoinUrl = GetNullableString(reader, "ZoomRegistrantJoinUrl"),
                     CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                 });
             }
@@ -163,7 +174,14 @@ namespace ZoomAttendance.Repositories.Implementations
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
-        private async Task SaveInviteAsync(int meetingId, Guid staffId, string token, DateTime expiresAt, string attendanceMode)
+        private async Task SaveInviteAsync(
+            int meetingId,
+            Guid staffId,
+            string token,
+            DateTime expiresAt,
+            string attendanceMode,
+            string? zoomRegistrantId,
+            string? zoomRegistrantJoinUrl)
         {
             using var connection = new SqlConnection(_connectionString);
             using var command = new SqlCommand("sp_SaveMeetingInvite", connection)
@@ -176,6 +194,8 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@Token", token);
             command.Parameters.AddWithValue("@ExpiresAt", expiresAt);
             command.Parameters.AddWithValue("@AttendanceMode", attendanceMode);
+            command.Parameters.AddWithValue("@ZoomRegistrantId", (object?)zoomRegistrantId ?? DBNull.Value);
+            command.Parameters.AddWithValue("@ZoomRegistrantJoinUrl", (object?)zoomRegistrantJoinUrl ?? DBNull.Value);
 
             await connection.OpenAsync();
             await command.ExecuteNonQueryAsync();
@@ -225,7 +245,9 @@ namespace ZoomAttendance.Repositories.Implementations
                 StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                 DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
                 ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomJoinUrl")),
-                Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
+                ZoomMeetingId = GetNullableString(reader, "ZoomMeetingId"),
+                VenueId = GetNullableInt(reader, "VenueId"),
+                VenueName = GetNullableString(reader, "VenueName") ?? GetNullableString(reader, "Location"),
             };
         }
 
@@ -289,7 +311,14 @@ namespace ZoomAttendance.Repositories.Implementations
             var expiresAt = meeting.StartDatetime.AddMinutes(meeting.DurationMinutes);
             var token = GenerateInviteToken(staffId, meetingId, expiresAt);
 
-            await SaveInviteAsync(meetingId, staffId, token, expiresAt, attendanceMode);
+            await SaveInviteAsync(
+                meetingId,
+                staffId,
+                token,
+                expiresAt,
+                attendanceMode,
+                null,
+                null);
 
             await _emailService.SendAttendanceLinkEmailAsync(
                 new ZoomAttendance.Entities.Staff { Name = staffName, Email = staffEmail },
@@ -301,12 +330,38 @@ namespace ZoomAttendance.Repositories.Implementations
                     StartDatetime = meeting.StartDatetime,
                     DurationMinutes = meeting.DurationMinutes,
                     ZoomJoinUrl = meeting.ZoomJoinUrl,
-                    Location = meeting.Location,
+                    VenueId = meeting.VenueId,
+                    VenueName = meeting.VenueName,
                 },
                 token);
         }
 
+        private static string? GetNullableString(SqlDataReader reader, string columnName)
+        {
+            var ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal.HasValue && !reader.IsDBNull(ordinal.Value)
+                ? reader.GetString(ordinal.Value)
+                : null;
+        }
 
+        private static int? GetNullableInt(SqlDataReader reader, string columnName)
+        {
+            var ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal.HasValue && !reader.IsDBNull(ordinal.Value)
+                ? reader.GetInt32(ordinal.Value)
+                : null;
+        }
+
+        private static int? TryGetOrdinal(SqlDataReader reader, string columnName)
+        {
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                if (string.Equals(reader.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+
+            return null;
+        }
 
     }
 }

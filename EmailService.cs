@@ -191,11 +191,13 @@ namespace ZoomAttendance.Services
 
         // rest of your code stays exactly the same...
         // ── Attendance invite email(mode - aware) ──────────────────────────────
-      public async Task SendAttendanceLinkEmailAsync(Staff staff, Meeting meeting, string token)
+        public async Task SendAttendanceLinkEmailAsync(Staff staff, Meeting meeting, string token, string? virtualJoinLink = null)
         {
             var baseUrl = _config["AppSettings:BaseUrl"]!;
-            var confirmLink = $"{baseUrl}/attendance/confirm?token={token}";
-            var joinLink = $"{baseUrl}/api/v1/meeting-invites/attendance/join?token={token}";
+            var confirmLink = $"{baseUrl}/api/v1/meeting-invites/attendance/confirm?token={token}";
+            var joinLink = !string.IsNullOrWhiteSpace(virtualJoinLink)
+                ? virtualJoinLink
+                : $"{baseUrl}/api/v1/meeting-invites/attendance/join?token={token}";
 
             var linksHtml = meeting.Mode switch
             {
@@ -221,6 +223,9 @@ namespace ZoomAttendance.Services
                                           font-weight:bold;display:inline-block;'>
                                     Join Zoom Meeting
                                 </a>
+                            </p>
+                            <p style='font-size:13px;color:#8a6d3b;font-weight:bold;'>
+                                Use your official staff email address on Zoom. Virtual attendance is matched with your Zoom email.
                             </p>",
 
                 _ /* hybrid */ => $@"
@@ -244,6 +249,9 @@ namespace ZoomAttendance.Services
                                           font-weight:bold;display:inline-block;'>
                                     Join Zoom Meeting
                                 </a>
+                            </p>
+                            <p style='font-size:13px;color:#8a6d3b;font-weight:bold;'>
+                                If you are attending virtually, use your official staff email address on Zoom so your attendance can be matched correctly.
                             </p>"
             };
 
@@ -271,6 +279,11 @@ namespace ZoomAttendance.Services
                                         <td style='padding:8px;font-weight:bold;color:#555;'>Mode</td>
                                         <td style='padding:8px;'>{meeting.Mode}</td>
                                     </tr>
+                                    {(string.IsNullOrWhiteSpace(meeting.VenueName) ? string.Empty : $@"
+                                    <tr>
+                                        <td style='padding:8px;font-weight:bold;color:#555;'>Venue</td>
+                                        <td style='padding:8px;'>{meeting.VenueName}</td>
+                                    </tr>")}
                                 </table>
                                 {linksHtml}
                                 <p style='font-size:13px;color:#666;margin-top:20px;'>

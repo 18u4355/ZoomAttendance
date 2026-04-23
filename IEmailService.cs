@@ -8,6 +8,7 @@ namespace ZoomAttendance.Services
         Task SendAttendanceLinkEmailAsync(
             ZoomAttendance.Entities.Staff staff,
             ZoomAttendance.Entities.Meeting meeting,
-            string token);
+            string token,
+            string? virtualJoinLink = null);
     }
 }

@@ -8,6 +8,9 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    /// <summary>
+    /// Manages department records used to group staff and target meeting audiences.
+    /// </summary>
     [Authorize]
     [ApiController]
     [Route("api/v1/departments")]
@@ -22,6 +25,13 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/departments?includeInactive=false
+        /// <summary>
+        /// Retrieves departments with optional status filtering and pagination.
+        /// </summary>
+        /// <param name="status">Optional department status filter. Expected values are <c>active</c> or <c>inactive</c>.</param>
+        /// <param name="pageNumber">The page number to return.</param>
+        /// <param name="pageSize">The number of records to return per page.</param>
+        /// <returns>A paginated list of departments.</returns>
         [HttpGet]
         public async Task<IActionResult> GetAll(
     [FromQuery] string? status,
@@ -53,6 +63,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/departments/{id}
+        /// <summary>
+        /// Retrieves the details of a single department by its identifier.
+        /// </summary>
+        /// <param name="id">The internal department identifier.</param>
+        /// <returns>The matching department record when found.</returns>
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -70,6 +85,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // POST api/v1/departments
+        /// <summary>
+        /// Creates a new department that can later be assigned to staff and meetings.
+        /// </summary>
+        /// <param name="request">The department payload containing the name and other creation values.</param>
+        /// <returns>The created department record.</returns>
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateDepartmentRequest request)
         {
@@ -93,6 +113,12 @@ namespace ZoomAttendance.Controllers
         }
 
         // PUT api/v1/departments/{id}
+        /// <summary>
+        /// Updates an existing department.
+        /// </summary>
+        /// <param name="id">The identifier of the department to update.</param>
+        /// <param name="request">The updated department values.</param>
+        /// <returns>The updated department record.</returns>
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateDepartmentRequest request)
         {
@@ -118,6 +144,11 @@ namespace ZoomAttendance.Controllers
             }
         }
 
+        /// <summary>
+        /// Deactivates a department so it is no longer available for normal operational use.
+        /// </summary>
+        /// <param name="id">The identifier of the department to deactivate.</param>
+        /// <returns>A success message when the department is deactivated.</returns>
         [HttpPatch("{id:int}/deactivate")]
         public async Task<IActionResult> Deactivate(int id)
         {
@@ -141,6 +172,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // PATCH api/v1/departments/{id}/restore
+        /// <summary>
+        /// Reactivates a previously deactivated department.
+        /// </summary>
+        /// <param name="id">The identifier of the department to reactivate.</param>
+        /// <returns>The restored department record.</returns>
         [HttpPatch("{id:int}/activate")]
         public async Task<IActionResult> Activate(int id)
         {
@@ -164,6 +200,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/departments/export?includeInactive=false
+        /// <summary>
+        /// Exports department records to Excel.
+        /// </summary>
+        /// <param name="includeInactive">When true, inactive departments are included in the export.</param>
+        /// <returns>An Excel file containing department data.</returns>
         [HttpGet("export")]
         public async Task<IActionResult> Export([FromQuery] bool includeInactive = false)
         {
@@ -181,6 +222,11 @@ namespace ZoomAttendance.Controllers
             }
         }
 
+        /// <summary>
+        /// Retrieves the meeting summary for a single department.
+        /// </summary>
+        /// <param name="id">The identifier of the department whose meeting summary is required.</param>
+        /// <returns>A department meeting summary response.</returns>
         [HttpGet("{id:int}/meeting-summary")]
         public async Task<IActionResult> GetMeetingSummary(int id)
         {

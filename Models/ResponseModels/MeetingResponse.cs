@@ -16,6 +16,7 @@ namespace ZoomAttendance.Models.ResponseModels
         public string AudienceType { get; set; } = string.Empty;
         public DateTime StartDatetime { get; set; }
         public int DurationMinutes { get; set; }
+        public int? VirtualAttendanceThresholdMinutes { get; set; }
 
         public DateTime EndDatetime { get; set; }
 
@@ -23,7 +24,11 @@ namespace ZoomAttendance.Models.ResponseModels
         public int InviteStatus { get; set; }
         public DateTime? InvitesSentAt { get; set; }
 
-        public string? Location { get; set; }
+        public int? VenueId { get; set; }
+        public string? VenueName { get; set; }
+        public decimal? VenueLatitude { get; set; }
+        public decimal? VenueLongitude { get; set; }
+        public int? VenueRadiusMetres { get; set; }
         public string? ZoomJoinUrl { get; set; }
         public string? ZoomMeetingId { get; set; }
         public string? ZoomStartUrl { get; set; }

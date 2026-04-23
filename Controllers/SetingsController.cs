@@ -5,6 +5,9 @@ using ZoomAttendance.Models.RequestModels;
 
 namespace ZoomAttendance.Controllers
 {
+    /// <summary>
+    /// Exposes authenticated HR profile and account settings endpoints.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     [Authorize(Roles = "HR")]
@@ -17,6 +20,10 @@ namespace ZoomAttendance.Controllers
             _repository = repository;
         }
 
+        /// <summary>
+        /// Retrieves the profile and settings of the currently authenticated HR user.
+        /// </summary>
+        /// <returns>The current HR user's settings payload.</returns>
         [HttpGet("me")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> GetMySettings()
@@ -28,6 +35,11 @@ namespace ZoomAttendance.Controllers
             return Ok(result);
         }
 
+        /// <summary>
+        /// Updates the profile information of the currently authenticated HR user.
+        /// </summary>
+        /// <param name="request">The updated profile details to persist.</param>
+        /// <returns>The updated settings payload.</returns>
         [HttpPut("me")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> UpdateProfile(UpdateProfileRequest request)
@@ -39,6 +51,11 @@ namespace ZoomAttendance.Controllers
             return Ok(result);
         }
 
+        /// <summary>
+        /// Changes the password of the currently authenticated HR user.
+        /// </summary>
+        /// <param name="request">The password change payload containing current and new passwords.</param>
+        /// <returns>The result of the password change operation.</returns>
         [HttpPost("change-password")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)

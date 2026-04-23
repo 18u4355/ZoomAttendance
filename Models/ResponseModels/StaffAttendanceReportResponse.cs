@@ -29,7 +29,7 @@ namespace ZoomAttendance.Models.ResponseModels
         public int MeetingId { get; set; }
         public string MeetingTitle { get; set; } = string.Empty;
         public string MeetingMode { get; set; } = string.Empty;
-        public string? MeetingLocation { get; set; }
+        public string? VenueName { get; set; }
         public DateTime StartDatetime { get; set; }
         public int DurationMinutes { get; set; }
         public string Status { get; set; } = string.Empty;

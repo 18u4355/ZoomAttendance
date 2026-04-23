@@ -5,25 +5,39 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    /// <summary>
+    /// Supports inviting HR users into the system and completing their first-time account setup.
+    /// </summary>
     [ApiController]
     [Route("api/hr")]
     public class HrController : ControllerBase
     {
         private readonly IHrRepository _hrRepo;
+        private readonly IDepartmentRepository _departmentRepo;
 
-        public HrController(IHrRepository hrRepo)
+        public HrController(IHrRepository hrRepo, IDepartmentRepository departmentRepo)
         {
             _hrRepo = hrRepo;
+            _departmentRepo = departmentRepo;
         }
 
         /// <summary>
-        /// Admin sends an invitation email to a new HR user.
-        /// The user row is created (inactive) and a setup link is emailed.
+        /// Sends an HR invitation email and creates an inactive user account pending setup completion.
         /// </summary>
         [HttpPost("invite")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> InviteHr([FromBody] InviteHrRequest request)
         {
+            if (!string.IsNullOrWhiteSpace(request.Department))
+            {
+                var departments = await _departmentRepo.GetAllAsync("active", 1, 1000);
+                var departmentExists = departments.Any(d =>
+                    string.Equals(d.Name?.Trim(), request.Department.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                if (!departmentExists)
+                    return BadRequest(Models.ResponseModels.ApiResponse<string>.Fail("The selected department does not exist."));
+            }
+
             var result = await _hrRepo.InviteHrAsync(request);
 
             if (!result.IsSuccessful)
@@ -33,8 +47,7 @@ namespace ZoomAttendance.Controllers
         }
 
         /// <summary>
-        /// Called when the invited HR user clicks the email link and submits their password.
-        /// Activates their account — no authentication required (public endpoint).
+        /// Completes the invited HR user's onboarding by setting credentials and activating the account.
         /// </summary>
         [HttpPost("complete-setup")]
         [AllowAnonymous]
