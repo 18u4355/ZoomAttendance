@@ -69,7 +69,7 @@ namespace ZoomAttendance.Repositories.Implementations
                     Status = reader.GetString(reader.GetOrdinal("Status")),
                     StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                     DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
-                    Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
+                    VenueName = GetNullableString(reader, "VenueName"),
                     ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomJoinUrl"))
                 });
             }
@@ -83,6 +83,17 @@ namespace ZoomAttendance.Repositories.Implementations
             };
 
             return response;
+        }
+
+        private static string? GetNullableString(SqlDataReader reader, string columnName)
+        {
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                if (string.Equals(reader.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                    return reader.IsDBNull(i) ? null : reader.GetString(i);
+            }
+
+            return null;
         }
     }
 }

@@ -85,16 +85,28 @@ namespace ZoomAttendance.Repositories.Implementations
 
             if (meeting == null) return null;
 
-            // Second result set — departments
-            if (await reader.NextResultAsync())
+            // Newer proc versions may return a second, richer meeting result set
+            // before the departments result set. We consume whichever comes next.
+            while (await reader.NextResultAsync())
             {
-                while (await reader.ReadAsync())
+                if (ResultSetHasColumn(reader, "AudienceType"))
                 {
-                    meeting.Departments.Add(new MeetingDepartmentResponse
+                    if (await reader.ReadAsync())
+                        meeting = MapToResponse(reader);
+
+                    continue;
+                }
+
+                if (ResultSetHasColumn(reader, "Name") && !ResultSetHasColumn(reader, "Mode"))
+                {
+                    while (await reader.ReadAsync())
                     {
-                        Id = reader.GetInt32(reader.GetOrdinal("Id")),
-                        Name = reader.GetString(reader.GetOrdinal("Name"))
-                    });
+                        meeting.Departments.Add(new MeetingDepartmentResponse
+                        {
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            Name = reader.GetString(reader.GetOrdinal("Name"))
+                        });
+                    }
                 }
             }
 
@@ -103,7 +115,18 @@ namespace ZoomAttendance.Repositories.Implementations
         public async Task<MeetingResponse> CreateAsync(CreateMeetingRequest request)
         {
             var mode = request.Mode.ToLower().Trim();
-            var audienceType = request.AudienceType.ToLower().Trim();        
+            var audienceType = request.AudienceType.ToLower().Trim();
+
+            ValidateMeetingModeRules(mode, request.VirtualAttendanceThresholdMinutes);
+            ValidateMeetingSchedule(request.StartDatetime);
+            await ValidateMeetingConfigurationAsync(
+                mode,
+                audienceType,
+                request.DurationMinutes,
+                request.VenueId,
+                request.VirtualAttendanceThresholdMinutes,
+                request.DepartmentIds,
+                request.VirtualStaffIds);
 
             string? zoomMeetingId = null;
             string? zoomJoinUrl = null;
@@ -138,6 +161,7 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@AudienceType", audienceType);
             command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
             command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
+            command.Parameters.AddWithValue("@VirtualAttendanceThresholdMinutes", (object?)request.VirtualAttendanceThresholdMinutes ?? DBNull.Value);
             command.Parameters.AddWithValue("@VenueId", (object?)request.VenueId ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomJoinUrl", (object?)zoomJoinUrl ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomMeetingId", (object?)zoomMeetingId ?? DBNull.Value);
@@ -185,6 +209,18 @@ namespace ZoomAttendance.Repositories.Implementations
             if (existing == null)
                 throw new KeyNotFoundException("Meeting not found.");
 
+            ValidateMeetingCanBeEdited(existing);
+            ValidateMeetingModeRules(mode, request.VirtualAttendanceThresholdMinutes);
+            ValidateMeetingSchedule(request.StartDatetime);
+            await ValidateMeetingConfigurationAsync(
+                mode,
+                audienceType,
+                request.DurationMinutes,
+                request.VenueId,
+                request.VirtualAttendanceThresholdMinutes,
+                request.DepartmentIds,
+                request.VirtualStaffIds);
+
             string? zoomMeetingId = existing.ZoomMeetingId;
             string? zoomJoinUrl = existing.ZoomJoinUrl;
             string? zoomStartUrl = existing.ZoomStartUrl;
@@ -230,8 +266,8 @@ namespace ZoomAttendance.Repositories.Implementations
             command.Parameters.AddWithValue("@Mode", mode);
             command.Parameters.AddWithValue("@AudienceType", audienceType);
             command.Parameters.AddWithValue("@StartDatetime", request.StartDatetime.ToUniversalTime());
-            command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);    
-            command.Parameters.AddWithValue("@Location", (object?)request.Location ?? DBNull.Value);
+            command.Parameters.AddWithValue("@DurationMinutes", request.DurationMinutes);
+            command.Parameters.AddWithValue("@VirtualAttendanceThresholdMinutes", (object?)request.VirtualAttendanceThresholdMinutes ?? DBNull.Value);
             command.Parameters.AddWithValue("@VenueId", (object?)request.VenueId ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomJoinUrl", (object?)zoomJoinUrl ?? DBNull.Value);
             command.Parameters.AddWithValue("@ZoomMeetingId", (object?)zoomMeetingId ?? DBNull.Value);
@@ -333,7 +369,9 @@ namespace ZoomAttendance.Repositories.Implementations
                     AudienceType = reader.GetString(reader.GetOrdinal("AudienceType")),
                     StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                     DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
-                    Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
+                    VirtualAttendanceThresholdMinutes = GetNullableInt(reader, "VirtualAttendanceThresholdMinutes"),
+                    VenueId = GetNullableInt(reader, "VenueId"),
+                    VenueName = GetNullableString(reader, "VenueName") ?? GetNullableString(reader, "Location"),
                     ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl")) ? null : reader.GetString(reader.GetOrdinal("ZoomJoinUrl")),
                     Status = reader.GetString(reader.GetOrdinal("Status")),
                     CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
@@ -344,7 +382,7 @@ namespace ZoomAttendance.Repositories.Implementations
             var headers = new[]
             {
                 "Id", "Title", "Mode", "Audience", "Start Date", "Duration (mins)",
-                "Location", "Zoom URL", "Status", "Created At", "Updated At"
+                "Venue", "Zoom URL", "Status", "Created At", "Updated At"
             };
 
             var rows = records.Select(m => new List<object?>
@@ -355,7 +393,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 m.AudienceType,
                 m.StartDatetime.ToString("yyyy-MM-dd HH:mm:ss"),
                 m.DurationMinutes,
-                m.Location  ?? "-",
+                m.VenueName ?? "-",
                 m.ZoomJoinUrl   ?? "-",
                 m.Status,
                 m.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -376,6 +414,7 @@ namespace ZoomAttendance.Repositories.Implementations
                 AudienceType = reader.GetString(reader.GetOrdinal("AudienceType")),
                 StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                 DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
+                VirtualAttendanceThresholdMinutes = GetNullableInt(reader, "VirtualAttendanceThresholdMinutes"),
                 EndDatetime = reader.IsDBNull(reader.GetOrdinal("EndDatetime"))
             ? default
             : reader.GetDateTime(reader.GetOrdinal("EndDatetime")),
@@ -387,6 +426,11 @@ namespace ZoomAttendance.Repositories.Implementations
                 InvitesSentAt = reader.IsDBNull(reader.GetOrdinal("InvitesSentAt"))
                     ? null
                     : reader.GetDateTime(reader.GetOrdinal("InvitesSentAt")),
+                VenueId = GetNullableInt(reader, "VenueId"),
+                VenueName = GetNullableString(reader, "VenueName") ?? GetNullableString(reader, "Location"),
+                VenueLatitude = GetNullableDecimal(reader, "VenueLatitude"),
+                VenueLongitude = GetNullableDecimal(reader, "VenueLongitude"),
+                VenueRadiusMetres = GetNullableInt(reader, "VenueRadiusMetres"),
                 ZoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl"))
                     ? null
                     : reader.GetString(reader.GetOrdinal("ZoomJoinUrl")), 
@@ -402,6 +446,46 @@ namespace ZoomAttendance.Repositories.Implementations
                
 
             };
+        }
+
+        private static string? GetNullableString(SqlDataReader reader, string columnName)
+        {
+            var ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal.HasValue && !reader.IsDBNull(ordinal.Value)
+                ? reader.GetString(ordinal.Value)
+                : null;
+        }
+
+        private static int? GetNullableInt(SqlDataReader reader, string columnName)
+        {
+            var ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal.HasValue && !reader.IsDBNull(ordinal.Value)
+                ? reader.GetInt32(ordinal.Value)
+                : null;
+        }
+
+        private static decimal? GetNullableDecimal(SqlDataReader reader, string columnName)
+        {
+            var ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal.HasValue && !reader.IsDBNull(ordinal.Value)
+                ? reader.GetDecimal(ordinal.Value)
+                : null;
+        }
+
+        private static int? TryGetOrdinal(SqlDataReader reader, string columnName)
+        {
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                if (string.Equals(reader.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+
+            return null;
+        }
+
+        private static bool ResultSetHasColumn(SqlDataReader reader, string columnName)
+        {
+            return TryGetOrdinal(reader, columnName).HasValue;
         }
 
         public async Task<List<int>> GetMeetingsDueForInviteSendAsync()
@@ -465,6 +549,105 @@ namespace ZoomAttendance.Repositories.Implementations
 
             await connection.OpenAsync();
             await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task UpdateMeetingStatusesAsync()
+        {
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand("sp_UpdateMeetingStatuses", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            await connection.OpenAsync();
+            await command.ExecuteNonQueryAsync();
+        }
+
+        private static void ValidateMeetingSchedule(DateTime startDatetime)
+        {
+            if (startDatetime.ToUniversalTime() <= DateTime.UtcNow)
+                throw new InvalidOperationException("Meeting start time cannot be in the past.");
+        }
+
+        private static void ValidateMeetingModeRules(string mode, int? virtualAttendanceThresholdMinutes)
+        {
+            if (mode == "physical" && virtualAttendanceThresholdMinutes.HasValue)
+                throw new InvalidOperationException("Virtual attendance threshold cannot be set for a physical meeting.");
+        }
+
+        private async Task ValidateMeetingConfigurationAsync(
+            string mode,
+            string audienceType,
+            int durationMinutes,
+            int? venueId,
+            int? virtualAttendanceThresholdMinutes,
+            List<int>? departmentIds,
+            List<Guid>? virtualStaffIds)
+        {
+            if (mode == "virtual" && venueId.HasValue)
+                throw new InvalidOperationException("Venue must not be provided for a virtual meeting.");
+
+            if ((mode == "physical" || mode == "hybrid") && !venueId.HasValue)
+                throw new InvalidOperationException("Venue is required for physical or hybrid meetings.");
+
+            if ((mode == "virtual" || mode == "hybrid") && !virtualAttendanceThresholdMinutes.HasValue)
+                throw new InvalidOperationException("Virtual attendance threshold is required for virtual or hybrid meetings.");
+
+            if ((mode == "virtual" || mode == "hybrid") &&
+                virtualAttendanceThresholdMinutes.HasValue &&
+                virtualAttendanceThresholdMinutes.Value > durationMinutes)
+            {
+                throw new InvalidOperationException("Virtual attendance threshold cannot be greater than meeting duration.");
+            }
+
+            if (audienceType == "all_staff" && departmentIds != null && departmentIds.Count > 0)
+                throw new InvalidOperationException("Department IDs must not be provided when audience type is all_staff.");
+
+            if (audienceType == "departments" && (departmentIds == null || departmentIds.Count == 0))
+                throw new InvalidOperationException("At least one department must be provided when audience type is departments.");
+
+            if (mode == "hybrid")
+            {
+
+                if (virtualStaffIds == null || virtualStaffIds.Count == 0)
+                    throw new InvalidOperationException("Virtual staff must be provided for a hybrid meeting.");
+            }
+
+            if (departmentIds != null && departmentIds.Count > 0)
+            {
+                var distinctDepartmentIds = departmentIds.Distinct().ToList();
+
+                using var connection = new SqlConnection(_connectionString);
+                const string sql = @"
+                        SELECT COUNT(*)
+                        FROM dbo.Departments
+                        WHERE Id IN ({0});";
+
+                var parameterNames = distinctDepartmentIds.Select((_, index) => $"@DepartmentId{index}").ToList();
+                using var command = new SqlCommand(string.Format(sql, string.Join(", ", parameterNames)), connection);
+
+                for (var i = 0; i < distinctDepartmentIds.Count; i++)
+                    command.Parameters.AddWithValue(parameterNames[i], distinctDepartmentIds[i]);
+
+                await connection.OpenAsync();
+                var count = (int)await command.ExecuteScalarAsync();
+
+                if (count != distinctDepartmentIds.Count)
+                    throw new InvalidOperationException("One or more selected departments do not exist.");
+            }
+        }
+
+        private static void ValidateMeetingCanBeEdited(MeetingResponse meeting)
+        {
+            if (meeting.StartDatetime.ToUniversalTime() <= DateTime.UtcNow)
+                throw new InvalidOperationException("You can only edit a meeting before it starts.");
+
+            if (string.Equals(meeting.Status, "in_progress", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(meeting.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(meeting.Status, "cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("This meeting can no longer be edited.");
+            }
         }
     }
 }

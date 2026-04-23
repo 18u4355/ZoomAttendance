@@ -83,30 +83,60 @@ namespace ZoomAttendance.Repositories.Implementations
             var meetingId = int.Parse(claims.First(c => c.Type == "meetingId").Value);
 
             using var connection = new SqlConnection(_connectionString);
-            using var command = new SqlCommand("sp_VirtualJoin", connection)
-            {
-                CommandType = CommandType.StoredProcedure
-            };
+            const string sql = @"
+SELECT TOP 1
+    m.ZoomJoinUrl,
+    m.StartDatetime,
+    m.EndDateTime,
+    m.DurationMinutes,
+    m.Status
+FROM dbo.Attendance a
+INNER JOIN dbo.Meetings m ON m.Id = a.MeetingId
+WHERE a.MeetingId = @MeetingId
+  AND a.StaffId = @StaffId;";
+
+            using var command = new SqlCommand(sql, connection);
             command.Parameters.AddWithValue("@MeetingId", meetingId);
             command.Parameters.AddWithValue("@StaffId", staffId);
 
             await connection.OpenAsync();
             using var reader = await command.ExecuteReaderAsync();
 
-            if (await reader.ReadAsync())
-            {
-                var errorCode = reader["ErrorCode"]?.ToString();
-                if (!string.IsNullOrEmpty(errorCode))
-                    throw new InvalidOperationException(reader["ErrorMessage"].ToString());
+            if (!await reader.ReadAsync())
+                throw new InvalidOperationException("Attendance record not found.");
 
-                return new VirtualJoinResponse
-                {
-                    ZoomJoinUrl = reader["ZoomJoinUrl"].ToString()!,
-                    Message = "Attendance recorded. Redirecting to Zoom."
-                };
+            var zoomJoinUrl = reader.IsDBNull(reader.GetOrdinal("ZoomJoinUrl"))
+                ? null
+                : reader.GetString(reader.GetOrdinal("ZoomJoinUrl"));
+            var meetingStatus = reader.IsDBNull(reader.GetOrdinal("Status"))
+                ? null
+                : reader.GetString(reader.GetOrdinal("Status"));
+            var startDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime"));
+            var durationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes"));
+            var endDatetime = reader.IsDBNull(reader.GetOrdinal("EndDateTime"))
+                ? startDatetime.AddMinutes(durationMinutes)
+                : reader.GetDateTime(reader.GetOrdinal("EndDateTime"));
+
+            if (DateTime.UtcNow > endDatetime.ToUniversalTime())
+                throw new InvalidOperationException("This meeting has ended. The join link is no longer active.");
+
+            if (string.Equals(meetingStatus, "completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(meetingStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The meeting has ended.");
             }
 
-            throw new InvalidOperationException("Unexpected error during virtual join.");
+            if (string.IsNullOrWhiteSpace(zoomJoinUrl))
+                throw new InvalidOperationException("Zoom join URL was not found for this meeting.");
+
+            await reader.CloseAsync();
+            await MarkMeetingInviteJoinedAsync(connection, token);
+
+            return new VirtualJoinResponse
+            {
+                ZoomJoinUrl = zoomJoinUrl,
+                Message = "Redirecting to Zoom. Attendance will be calculated automatically."
+            };
         }
 
         // ── Virtual End Confirm ───────────────────────────────────────────────
@@ -310,16 +340,23 @@ namespace ZoomAttendance.Repositories.Implementations
         {
             var secret = _configuration["AppSettings:JwtInviteSecret"]!;
             var handler = new JwtSecurityTokenHandler();
-            var result = handler.ValidateToken(token, new TokenValidationParameters
+            try
             {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.Zero
-            }, out _);
-            return result.Claims;
+                var result = handler.ValidateToken(token, new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.Zero
+                }, out _);
+                return result.Claims;
+            }
+            catch (SecurityTokenExpiredException)
+            {
+                throw new InvalidOperationException("The meeting has ended.");
+            }
         }
 
         private IEnumerable<Claim> ValidateEndConfirmToken(string token)
@@ -328,6 +365,18 @@ namespace ZoomAttendance.Repositories.Implementations
             if (claims.FirstOrDefault(c => c.Type == "type")?.Value != "endconfirm")
                 throw new SecurityTokenException("Invalid token type.");
             return claims;
+        }
+
+        private static async Task MarkMeetingInviteJoinedAsync(SqlConnection connection, string token)
+        {
+            const string sql = @"
+UPDATE dbo.MeetingInvites
+SET JoinedAt = COALESCE(JoinedAt, SYSUTCDATETIME())
+WHERE Token = @Token;";
+
+            using var command = new SqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@Token", token);
+            await command.ExecuteNonQueryAsync();
         }
 
         private static AttendanceResponse MapFromReader(SqlDataReader reader)
@@ -352,6 +401,18 @@ namespace ZoomAttendance.Repositories.Implementations
                 UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
             };
         }
+
+        private static string? GetNullableString(SqlDataReader reader, string columnName)
+        {
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                if (string.Equals(reader.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                    return reader.IsDBNull(i) ? null : reader.GetString(i);
+            }
+
+            return null;
+        }
+
         public async Task<StaffAttendanceReportResponse> GetStaffReportAsync(Guid staffId, StaffAttendanceReportRequest request)
         {
             using var connection = new SqlConnection(_connectionString);
@@ -406,7 +467,7 @@ namespace ZoomAttendance.Repositories.Implementations
                         MeetingId = reader.GetInt32(reader.GetOrdinal("MeetingId")),
                         MeetingTitle = reader.GetString(reader.GetOrdinal("MeetingTitle")),
                         MeetingMode = reader.GetString(reader.GetOrdinal("MeetingMode")),
-                        MeetingLocation = reader.IsDBNull(reader.GetOrdinal("MeetingLocation")) ? null : reader.GetString(reader.GetOrdinal("MeetingLocation")),
+                        VenueName = GetNullableString(reader, "VenueName") ?? GetNullableString(reader, "MeetingLocation"),
                         StartDatetime = reader.GetDateTime(reader.GetOrdinal("StartDatetime")),
                         DurationMinutes = reader.GetInt32(reader.GetOrdinal("DurationMinutes")),
                         Status = reader.GetString(reader.GetOrdinal("Status")),

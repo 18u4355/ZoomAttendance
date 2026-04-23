@@ -7,6 +7,9 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    /// <summary>
+    /// Exposes dashboard data used to power the main administrative overview screen.
+    /// </summary>
     [ApiController]
     [Route("api/v1/dashboard")]
     [Produces("application/json")]
@@ -21,6 +24,10 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/dashboard
+        /// <summary>
+        /// Retrieves the dashboard snapshot including counts, attendance metrics, and upcoming meetings.
+        /// </summary>
+        /// <returns>A dashboard response containing high-level operational statistics.</returns>
         [HttpGet]
         public async Task<IActionResult> GetStats()
         {

@@ -2,20 +2,29 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Reflection;
 using System.Text;
 using ZoomAttendance.BackgroundJobs;
 using ZoomAttendance.Data;
 using ZoomAttendance.Helpers;
+using ZoomAttendance.Helpers.Logging;
+using ZoomAttendance.Models;
 using ZoomAttendance.Repositories.Implementations;
 using ZoomAttendance.Repositories.Interfaces;
 using ZoomAttendance.Services;
-using ZoomAttendance.Models;
 
 internal class Program
 {
     private static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        var logDirectory = Path.Combine(builder.Environment.ContentRootPath, "logs");
+
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole();
+        builder.Logging.AddDebug();
+        builder.Logging.AddProvider(new FileLoggerProvider(logDirectory, LogLevel.Information));
+
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
         );
@@ -34,14 +43,16 @@ internal class Program
         builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         builder.Services.AddScoped<IEmailService, EmailService>();
         builder.Services.AddScoped<IMeetingInviteRepository, MeetingInviteRepository>();
-        builder.Services.AddHostedService<AttendanceBackgroundJob>();
         builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 
         builder.Services.AddHttpClient();
         builder.Services.Configure<ZoomSettings>(builder.Configuration.GetSection("ZoomSettings"));
+        builder.Services.Configure<ZoomWebhookSettings>(builder.Configuration.GetSection("ZoomWebhookSettings"));
         builder.Services.AddScoped<IZoomService, ZoomService>();
+        builder.Services.AddScoped<IZoomWebhookRepository, ZoomWebhookRepository>();
         builder.Services.AddScoped<IHrRepository, HrRepository>();
         builder.Services.AddHostedService<InviteSchedulerBackgroundJob>();
+        builder.Services.AddHostedService<MeetingStatusBackgroundJob>();
         builder.Services.AddScoped<IVenueRepository, VenueRepository>();
 
 
@@ -58,6 +69,12 @@ internal class Program
                 Title = "Zoom Attendance API",
                 Version = "v1"
             });
+            var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+            var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+            if (File.Exists(xmlPath))
+            {
+                c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+            }
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -100,6 +117,31 @@ internal class Program
             });
         builder.Services.AddAuthorization();
         var app = builder.Build();
+        var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+
+        app.Use(async (context, next) =>
+        {
+            try
+            {
+                await next();
+            }
+            catch (Exception ex)
+            {
+                startupLogger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+                throw;
+            }
+
+            if (context.Response.StatusCode >= 500)
+            {
+                startupLogger.LogError(
+                    "Request {Method} {Path} completed with status code {StatusCode}",
+                    context.Request.Method,
+                    context.Request.Path,
+                    context.Response.StatusCode);
+            }
+        });
+
+        startupLogger.LogInformation("Application starting. File logs will be written to {LogDirectory}", logDirectory);
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();

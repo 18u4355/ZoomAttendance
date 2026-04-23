@@ -38,7 +38,7 @@ namespace ZoomAttendance.Models.ResponseModels
         public string Status { get; set; } = string.Empty;
         public DateTime StartDatetime { get; set; }
         public int DurationMinutes { get; set; }
-        public string? Location { get; set; }
+        public string? VenueName { get; set; }
         public string? ZoomJoinUrl { get; set; }
     }
 

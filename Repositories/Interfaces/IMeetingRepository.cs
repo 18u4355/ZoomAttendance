@@ -16,6 +16,7 @@ namespace ZoomAttendance.Repositories.Interfaces
         Task MarkInviteProcessingAsync(int meetingId);
         Task MarkInviteSentAsync(int meetingId);
         Task MarkInviteFailedAsync(int meetingId);
+        Task UpdateMeetingStatusesAsync();
         Task<byte[]> ExportAsync(MeetingFilterRequest filter);
     }
 }

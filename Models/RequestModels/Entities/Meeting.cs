@@ -8,6 +8,7 @@
         public string AudienceType { get; set; } = string.Empty;
         public DateTime StartDatetime { get; set; }
         public int DurationMinutes { get; set; }
+        public int? VirtualAttendanceThresholdMinutes { get; set; }
 
         public DateTime EndDatetime { get; set; }
 
@@ -15,7 +16,8 @@
         public string InviteStatus { get; set; } = "pending";
         public DateTime? InvitesSentAt { get; set; }
 
-        public string? Location { get; set; }
+        public int? VenueId { get; set; }
+        public string? VenueName { get; set; }
 
         public string? ZoomJoinUrl { get; set; }
         public string? ZoomMeetingId { get; set; }

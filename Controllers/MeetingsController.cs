@@ -8,6 +8,9 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    /// <summary>
+    /// Manages meetings, including creation, retrieval, updates, and deletion.
+    /// </summary>
     [ApiController]
     [Route("api/v1/meetings")]
     [Produces("application/json")]
@@ -21,6 +24,11 @@ namespace ZoomAttendance.Controllers
             _repo = repo;
         }
 
+        /// <summary>
+        /// Retrieves paginated meetings using the supplied filters such as mode, audience type, status, and date range.
+        /// </summary>
+        /// <param name="filter">Optional search and pagination parameters for meeting retrieval.</param>
+        /// <returns>A paginated collection of meeting records.</returns>
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] MeetingFilterRequest filter)
         {
@@ -35,6 +43,11 @@ namespace ZoomAttendance.Controllers
             }
         }
 
+        /// <summary>
+        /// Retrieves a single meeting by its identifier, including related department information.
+        /// </summary>
+        /// <param name="id">The internal identifier of the meeting.</param>
+        /// <returns>The requested meeting record when found.</returns>
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -52,6 +65,11 @@ namespace ZoomAttendance.Controllers
             }
         }
 
+        /// <summary>
+        /// Creates a new meeting and, where required, provisions the related Zoom meeting details.
+        /// </summary>
+        /// <param name="request">The meeting payload, including schedule, venue, virtual settings, and audience information.</param>
+        /// <returns>The created meeting record.</returns>
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateMeetingRequest request)
         {
@@ -74,6 +92,12 @@ namespace ZoomAttendance.Controllers
             }
         }
 
+        /// <summary>
+        /// Updates an existing meeting and synchronizes the linked Zoom meeting when applicable.
+        /// </summary>
+        /// <param name="id">The identifier of the meeting to update.</param>
+        /// <param name="request">The updated meeting payload.</param>
+        /// <returns>The updated meeting record.</returns>
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateMeetingRequest request)
         {
@@ -99,6 +123,11 @@ namespace ZoomAttendance.Controllers
             }
         }
 
+        /// <summary>
+        /// Deletes a meeting by its identifier.
+        /// </summary>
+        /// <param name="id">The identifier of the meeting to delete.</param>
+        /// <returns>A success message when the deletion completes.</returns>
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {

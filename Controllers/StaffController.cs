@@ -9,6 +9,9 @@ using ZoomAttendance.Repositories.Interfaces;
 
 namespace ZoomAttendance.Controllers
 {
+    /// <summary>
+    /// Manages staff records, status changes, bulk import, templates, and exports.
+    /// </summary>
     [Authorize]
     [ApiController]
     [Route("api/v1/staff")]
@@ -23,6 +26,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/staff
+        /// <summary>
+        /// Retrieves paginated staff records using the supplied filters.
+        /// </summary>
+        /// <param name="filter">Search, department, status, and pagination filters for staff retrieval.</param>
+        /// <returns>A paginated list of staff members.</returns>
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] StaffFilterRequest filter)
         {
@@ -38,6 +46,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/staff/{id}
+        /// <summary>
+        /// Retrieves a single staff record by its unique identifier.
+        /// </summary>
+        /// <param name="id">The unique identifier of the staff member.</param>
+        /// <returns>The requested staff record when found.</returns>
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> GetById(Guid id)
         {
@@ -55,6 +68,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // POST api/v1/staff
+        /// <summary>
+        /// Creates a new staff member record.
+        /// </summary>
+        /// <param name="request">The staff creation payload.</param>
+        /// <returns>The created staff record.</returns>
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateStaffRequest request)
         {
@@ -83,6 +101,12 @@ namespace ZoomAttendance.Controllers
         }
 
         // PUT api/v1/staff/{id}
+        /// <summary>
+        /// Updates an existing staff member.
+        /// </summary>
+        /// <param name="id">The identifier of the staff member to update.</param>
+        /// <param name="request">The updated staff payload.</param>
+        /// <returns>The updated staff record.</returns>
         [HttpPut("{id:guid}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateStaffRequest request)
         {
@@ -110,6 +134,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // DELETE api/v1/staff/{id}
+        /// <summary>
+        /// Deletes a staff member record.
+        /// </summary>
+        /// <param name="id">The identifier of the staff member to delete.</param>
+        /// <returns>A success message when deletion completes.</returns>
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
@@ -132,6 +161,12 @@ namespace ZoomAttendance.Controllers
         }
 
         // PATCH api/v1/staff/{id}/status
+        /// <summary>
+        /// Updates the status of a staff member, for example activating or deactivating them.
+        /// </summary>
+        /// <param name="id">The identifier of the staff member whose status should change.</param>
+        /// <param name="request">The requested new status value.</param>
+        /// <returns>A success message when the status change completes.</returns>
         [HttpPatch("{id:guid}/status")]
         public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateStaffStatusRequest request)
         {
@@ -154,6 +189,10 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/staff/upload-template
+        /// <summary>
+        /// Downloads the Excel template used for bulk staff import.
+        /// </summary>
+        /// <returns>An Excel template file for bulk upload preparation.</returns>
         [HttpGet("upload-template")]
         public async Task<IActionResult> GetUploadTemplate()
         {
@@ -171,6 +210,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // POST api/v1/staff/bulk-upload
+        /// <summary>
+        /// Imports staff members from an uploaded Excel file.
+        /// </summary>
+        /// <param name="file">The Excel file containing the staff rows to import.</param>
+        /// <returns>A summary of successful and failed imports.</returns>
         [HttpPost("bulk-upload")]
         public async Task<IActionResult> BulkUpload(IFormFile file)
         {
@@ -196,6 +240,11 @@ namespace ZoomAttendance.Controllers
         }
 
         // GET api/v1/staff/export
+        /// <summary>
+        /// Exports staff records to Excel using the supplied filters.
+        /// </summary>
+        /// <param name="filter">Optional staff filters to apply before exporting.</param>
+        /// <returns>An Excel file containing the filtered staff records.</returns>
         [HttpGet("export")]
         public async Task<IActionResult> Export([FromQuery] StaffFilterRequest filter)
         {

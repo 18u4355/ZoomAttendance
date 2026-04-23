@@ -81,6 +81,56 @@ namespace ZoomAttendance.Services
             );
         }
 
+        public async Task<(string RegistrantId, string JoinUrl)> CreateRegistrantAsync(
+            string zoomMeetingId,
+            string firstName,
+            string email)
+        {
+            if (string.IsNullOrWhiteSpace(zoomMeetingId))
+                throw new ArgumentException("Zoom meeting ID is required.", nameof(zoomMeetingId));
+
+            if (string.IsNullOrWhiteSpace(firstName))
+                throw new ArgumentException("Registrant name is required.", nameof(firstName));
+
+            if (string.IsNullOrWhiteSpace(email))
+                throw new ArgumentException("Registrant email is required.", nameof(email));
+
+            var token = await GetAccessTokenAsync();
+
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", token);
+
+            var payload = new
+            {
+                email,
+                first_name = firstName
+            };
+
+            var content = new StringContent(
+                JsonConvert.SerializeObject(payload),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await client.PostAsync(
+                $"https://api.zoom.us/v2/meetings/{zoomMeetingId}/registrants",
+                content);
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Zoom Create Registrant failed. Status:{(int)response.StatusCode}, Body:{responseBody}");
+
+            dynamic registrant = JsonConvert.DeserializeObject(responseBody)!;
+
+            var registrantId = registrant.registrant_id?.ToString();
+            var joinUrl = registrant.join_url?.ToString();
+
+            if (string.IsNullOrWhiteSpace(registrantId) || string.IsNullOrWhiteSpace(joinUrl))
+                throw new Exception("Zoom registrant response did not include registrant_id or join_url.");
+
+            return (registrantId!, joinUrl!);
+        }
+
         public async Task UpdateMeetingAsync(
             string zoomMeetingId,
             string title,

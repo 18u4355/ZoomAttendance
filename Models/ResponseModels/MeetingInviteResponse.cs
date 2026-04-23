@@ -32,6 +32,9 @@ namespace ZoomAttendance.Models.ResponseModels
         public DateTime? ExpiresAt { get; set; }
         public DateTime? ConfirmedAt { get; set; }
         public DateTime? JoinedAt { get; set; }
+        public string? AttendanceMode { get; set; }
+        public string? ZoomRegistrantId { get; set; }
+        public string? ZoomRegistrantJoinUrl { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 

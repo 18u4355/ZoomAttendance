@@ -6,6 +6,11 @@
             DateTime startDatetime,
             int durationMinutes);
 
+        Task<(string RegistrantId, string JoinUrl)> CreateRegistrantAsync(
+            string zoomMeetingId,
+            string firstName,
+            string email);
+
         Task UpdateMeetingAsync(
             string zoomMeetingId,
             string title,

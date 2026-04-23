@@ -21,6 +21,9 @@ namespace ZoomAttendance.Models.RequestModels
         [Range(1, int.MaxValue, ErrorMessage = "Duration must be at least 1 minute.")]
         public int DurationMinutes { get; set; }
 
+        [Range(1, int.MaxValue, ErrorMessage = "Virtual attendance threshold must be at least 1 minute.")]
+        public int? VirtualAttendanceThresholdMinutes { get; set; }
+
         public int? VenueId { get; set; }
         public List<int>? DepartmentIds { get; set; }
 
@@ -47,7 +50,8 @@ namespace ZoomAttendance.Models.RequestModels
         [Range(1, int.MaxValue, ErrorMessage = "Duration must be at least 1 minute.")]
         public int DurationMinutes { get; set; }
 
-        public string? Location { get; set; }
+        [Range(1, int.MaxValue, ErrorMessage = "Virtual attendance threshold must be at least 1 minute.")]
+        public int? VirtualAttendanceThresholdMinutes { get; set; }
 
         //[Required(ErrorMessage = "Status is required.")]
         //public string Status { get; set; } = string.Empty;
