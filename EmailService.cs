@@ -194,10 +194,10 @@ namespace ZoomAttendance.Services
         public async Task SendAttendanceLinkEmailAsync(Staff staff, Meeting meeting, string token, string? virtualJoinLink = null)
         {
             var baseUrl = _config["AppSettings:BaseUrl"]!;
-            var confirmLink = $"{baseUrl}/api/v1/meeting-invites/attendance/confirm?token={token}";
+            var confirmLink = $"{baseUrl}/confirm?token={token}";
             var joinLink = !string.IsNullOrWhiteSpace(virtualJoinLink)
                 ? virtualJoinLink
-                : $"{baseUrl}/api/v1/meeting-invites/attendance/join?token={token}";
+                : $"{baseUrl}/join?token={token}";
 
             var linksHtml = meeting.Mode switch
             {
